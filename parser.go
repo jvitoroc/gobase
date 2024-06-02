@@ -33,7 +33,7 @@ var (
 		},
 		{
 			name:    "decimal_literal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\d+\.?\d+`)},
+			regexps: []*regexp.Regexp{regexp.MustCompile(`^\d+\.\d+`)},
 		},
 		{
 			name:    "integer_literal",
@@ -124,6 +124,10 @@ type token struct {
 	value string
 }
 
+func (tk *token) isParenthesis() bool {
+	return tk._type == "left_parenthesis" || tk._type == "right_parenthesis"
+}
+
 func (t *tokenizer) getNextToken() *token {
 	if t.cursor >= len(t.query) {
 		return nil
@@ -157,6 +161,10 @@ func (t *tokenizer) getNextToken() *token {
 
 	if tk._type == "whitespace" {
 		return t.getNextToken()
+	}
+
+	if tk._type == "string_literal" {
+		tk.value = tk.value[1 : len(tk.value)-1]
 	}
 
 	return tk
@@ -316,6 +324,81 @@ func (p *parser) whereBody() (any, error) {
 	return body, nil
 }
 
+var (
+	logicalOperators    = []string{"and", "or"}
+	comparisonOperators = []string{"equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
+)
+
+func tokensToExpressionTree(tokens []token) *expression {
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	if len(tokens) == 1 {
+		return &expression{
+			_type: tokens[0]._type,
+			value: tokens[0].value,
+		}
+	}
+
+	root := -1
+
+	for i, tk := range tokens {
+		if tk.isParenthesis() {
+			if root != -1 {
+				break
+			}
+		}
+		if slices.Contains(logicalOperators, tk._type) {
+			root = i
+		}
+	}
+
+	if root == -1 {
+		for i, tk := range tokens {
+			if tk.isParenthesis() {
+				if root != -1 {
+					break
+				}
+			}
+			if slices.Contains(comparisonOperators, tk._type) {
+				root = i
+			}
+		}
+	}
+
+	if root == -1 {
+		for i, tk := range tokens {
+			if !tk.isParenthesis() {
+				root = i
+				break
+			}
+		}
+	}
+
+	if root == -1 {
+		return nil
+	}
+
+	left := tokens[0:root]
+	right := tokens[root+1:]
+
+	// if len(left) > 0 && left[0].isParenthesis() {
+	// 	left = left[1:]
+	// }
+
+	// if len(right) > 0 && right[len(right)-1].isParenthesis() {
+	// 	right = right[0 : len(right)-1]
+	// }
+
+	return &expression{
+		_type: tokens[root]._type,
+		value: tokens[root].value,
+		left:  tokensToExpressionTree(left),
+		right: tokensToExpressionTree(right),
+	}
+}
+
 func checkParenthesesBalance(tokens []token) bool {
 	unclosedParentheses := 0
 	for _, t := range tokens {
@@ -414,4 +497,18 @@ func checkParenthesesSyntax(tokens []token) error {
 	}
 
 	return nil
+}
+
+func (p *parser) mustTokenize() []token {
+	tokens := make([]token, 0)
+	for {
+		p.lookahead = p.t.getNextToken()
+		if p.lookahead == nil {
+			break
+		}
+
+		tokens = append(tokens, *p.lookahead)
+	}
+
+	return tokens
 }

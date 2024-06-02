@@ -17,7 +17,7 @@ var (
 
 func TestQuery(t *testing.T) {
 	p := &parser{}
-	q, err := p.Parse(`SELeCT foo     ,    bar FROM       jobs  where (foo ==  "bbbbasdasd asd asd ") or (bar >= 1.0);`)
+	q, err := p.Parse(`SELeCT foo     ,    bar FROM       jobs  where (foo ==  "  bbbbasdasd asd asd ") or (bar >= 1.0);`)
 	if err != nil {
 		t.Error(err)
 	}
@@ -37,7 +37,7 @@ func TestQuery(t *testing.T) {
 					{_type: "left_parenthesis", value: "("},
 					{_type: "name", value: "foo"},
 					{_type: "equal", value: "=="},
-					{_type: "string_literal", value: "\"bbbbasdasd asd asd \""},
+					{_type: "string_literal", value: "  bbbbasdasd asd asd "},
 					{_type: "right_parenthesis", value: ")"},
 					{_type: "or", value: "or"},
 					{_type: "left_parenthesis", value: "("},
@@ -201,5 +201,140 @@ func Test_checkParenthesesBalance(t *testing.T) {
 		if tt.valid != checkParenthesesBalance(tt.tokens) {
 			t.Errorf("expected balance test %d to be successful", i+1)
 		}
+	}
+}
+
+func Test_tokensToExpressionTree(t *testing.T) {
+	tests := []struct {
+		name       string
+		expression string
+		want       *expression
+	}{
+		// {
+		// 	name:       "test 1",
+		// 	expression: "foo == \"aaa\"",
+		// 	want: &expression{
+		// 		_type: "equal",
+		// 		value: "==",
+		// 		left: &expression{
+		// 			_type: "name",
+		// 			value: "foo",
+		// 		},
+		// 		right: &expression{
+		// 			_type: "string_literal",
+		// 			value: "aaa",
+		// 		},
+		// 	},
+		// },
+		// {
+		// 	name:       "test 2",
+		// 	expression: "foo == \"aaa\" and bar != true",
+		// 	want: &expression{
+		// 		_type: "and",
+		// 		value: "and",
+		// 		left: &expression{
+		// 			_type: "equal",
+		// 			value: "==",
+		// 			left: &expression{
+		// 				_type: "name",
+		// 				value: "foo",
+		// 			},
+		// 			right: &expression{
+		// 				_type: "string_literal",
+		// 				value: "aaa",
+		// 			},
+		// 		},
+		// 		right: &expression{
+		// 			_type: "not_equal",
+		// 			value: "!=",
+		// 			left: &expression{
+		// 				_type: "name",
+		// 				value: "bar",
+		// 			},
+		// 			right: &expression{
+		// 				_type: "boolean_literal",
+		// 				value: "true",
+		// 			},
+		// 		},
+		// 	},
+		// },
+		{
+			name:       "test 3",
+			expression: "foo == \"aaa\" and ((bar != true and aaa >= 34.12) or foo == 123)",
+			want: &expression{
+				_type: "and",
+				value: "and",
+				left: &expression{
+					_type: "equal",
+					value: "==",
+					left: &expression{
+						_type: "name",
+						value: "foo",
+					},
+					right: &expression{
+						_type: "string_literal",
+						value: "aaa",
+					},
+				},
+				right: &expression{
+					_type: "or",
+					value: "or",
+					left: &expression{
+						_type: "and",
+						value: "and",
+						left: &expression{
+							_type: "not_equal",
+							value: "!=",
+							left: &expression{
+								_type: "name",
+								value: "bar",
+							},
+							right: &expression{
+								_type: "boolean_literal",
+								value: "true",
+							},
+						},
+						right: &expression{
+							_type: "greater_equal",
+							value: ">=",
+							left: &expression{
+								_type: "name",
+								value: "aaa",
+							},
+							right: &expression{
+								_type: "decimal_literal",
+								value: "34.12",
+							},
+						},
+					},
+					right: &expression{
+						_type: "equal",
+						value: "==",
+						left: &expression{
+							_type: "name",
+							value: "foo",
+						},
+						right: &expression{
+							_type: "integer_literal",
+							value: "123",
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser{
+				t: &tokenizer{
+					query: tt.expression,
+				},
+			}
+			tokens := p.mustTokenize()
+			got := tokensToExpressionTree(tokens)
+			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(expression{})); diff != "" {
+				t.Error(diff)
+			}
+		})
 	}
 }
