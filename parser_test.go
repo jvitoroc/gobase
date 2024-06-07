@@ -7,17 +7,14 @@ import (
 )
 
 var (
-	leftParenthesis  = token{_type: "left_parenthesis", value: ")"}
-	rightParenthesis = token{_type: "right_parenthesis", value: "("}
-	and              = token{_type: "and", value: "and"}
-	or               = token{_type: "or", value: "or"}
-	equal            = token{_type: "equal", value: "=="}
-	not_equal        = token{_type: "not_equal", value: "!="}
+	leftParenthesis  = token{_type: "left_parenthesis", valueStr: ")"}
+	rightParenthesis = token{_type: "right_parenthesis", valueStr: "("}
 )
 
-func TestQuery(t *testing.T) {
+func Test_parse(t *testing.T) {
 	p := &parser{}
-	q, err := p.Parse(`SELeCT foo     ,    bar FROM       jobs  where (foo ==  "  bbbbasdasd asd asd ") or (bar >= 1.0);`)
+	q, err := p.parse(`SELeCT foo     , bar    FROM       jobs  where (foo == 
+		 "  bbbbasdasd asd asd ") or (bar >= 1.0);`)
 	if err != nil {
 		t.Error(err)
 	}
@@ -34,13 +31,13 @@ func TestQuery(t *testing.T) {
 			{
 				Keyword: "where",
 				Body: []token{
-					{_type: "name", value: "foo"},
-					{_type: "string_literal", value: "  bbbbasdasd asd asd "},
-					{_type: "equal", value: "=="},
-					{_type: "name", value: "bar"},
-					{_type: "decimal_literal", value: "1.0"},
-					{_type: "greater_equal", value: ">="},
-					{_type: "or", value: "or"},
+					{_type: "name", valueStr: "foo", line: 1, column: 49},
+					{_type: "string_literal", valueStr: "  bbbbasdasd asd asd ", line: 2, column: 4},
+					{_type: "equal", valueStr: "==", line: 1, column: 53},
+					{_type: "name", valueStr: "bar", line: 2, column: 33},
+					{_type: "decimal_literal", valueStr: "1.0", line: 2, column: 40},
+					{_type: "greater_equal", valueStr: ">=", line: 2, column: 37},
+					{_type: "or", valueStr: "or", line: 2, column: 29},
 				},
 			},
 		},
@@ -77,8 +74,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "invalid token",
 			args: args{
 				tokens: []token{
-					{_type: "left_parenthesis", value: "("},
-					{_type: "keyword", value: "select"},
+					{_type: "left_parenthesis", valueStr: "("},
+					{_type: "keyword", valueStr: "select"},
 				},
 			},
 			wantErr: "'select' is not valid as part of an expression",
@@ -87,8 +84,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "invalid beginning of expression",
 			args: args{
 				tokens: []token{
-					{_type: "and", value: "and"},
-					{_type: "keyword", value: "select"},
+					{_type: "and", valueStr: "and"},
+					{_type: "keyword", valueStr: "select"},
 				},
 			},
 			wantErr: "can't start expression with operator 'and'",
@@ -97,8 +94,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "invalid token after operand",
 			args: args{
 				tokens: []token{
-					{_type: "string_literal", value: "asdasda"},
-					{_type: "decimal_literal", value: "121"},
+					{_type: "string_literal", valueStr: "asdasda"},
+					{_type: "decimal_literal", valueStr: "121"},
 				},
 			},
 			wantErr: "expected operator after 'asdasda'",
@@ -107,10 +104,10 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "invalid token after operator",
 			args: args{
 				tokens: []token{
-					{_type: "string_literal", value: "asdasda"},
-					{_type: "equal", value: "=="},
-					{_type: "not_equal", value: "!="},
-					{_type: "string_literal", value: "asdasda"},
+					{_type: "string_literal", valueStr: "asdasda"},
+					{_type: "equal", valueStr: "=="},
+					{_type: "not_equal", valueStr: "!="},
+					{_type: "string_literal", valueStr: "asdasda"},
 				},
 			},
 			wantErr: "expected operand after '=='",
@@ -119,8 +116,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "empty parentheses",
 			args: args{
 				tokens: []token{
-					{_type: "left_parenthesis", value: "("},
-					{_type: "right_parenthesis", value: ")"},
+					{_type: "left_parenthesis", valueStr: "("},
+					{_type: "right_parenthesis", valueStr: ")"},
 				},
 			},
 			wantErr: "empty parentheses",
@@ -129,8 +126,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "invalid token after left_parenthesis",
 			args: args{
 				tokens: []token{
-					{_type: "left_parenthesis", value: "("},
-					{_type: "and", value: "and"},
+					{_type: "left_parenthesis", valueStr: "("},
+					{_type: "and", valueStr: "and"},
 				},
 			},
 			wantErr: "a left parenthesis can't precede an operator",
@@ -139,8 +136,8 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "ending expression with operator",
 			args: args{
 				tokens: []token{
-					{_type: "right_parenthesis", value: ")"},
-					{_type: "and", value: "and"},
+					{_type: "right_parenthesis", valueStr: ")"},
+					{_type: "and", valueStr: "and"},
 				},
 			},
 			wantErr: "can't end expression with an operator 'and'",
@@ -149,17 +146,17 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			name: "happy path",
 			args: args{
 				tokens: []token{
-					{_type: "left_parenthesis", value: "("},
-					{_type: "name", value: "foo"},
-					{_type: "equal", value: "=="},
-					{_type: "string_literal", value: "\"bbbbasdasd asd asd \""},
-					{_type: "right_parenthesis", value: ")"},
-					{_type: "or", value: "or"},
-					{_type: "left_parenthesis", value: "("},
-					{_type: "name", value: "bar"},
-					{_type: "greater_equal", value: ">="},
-					{_type: "decimal_literal", value: "1.0"},
-					{_type: "right_parenthesis", value: ")"},
+					{_type: "left_parenthesis", valueStr: "("},
+					{_type: "name", valueStr: "foo"},
+					{_type: "equal", valueStr: "=="},
+					{_type: "string_literal", valueStr: "\"bbbbasdasd asd asd \""},
+					{_type: "right_parenthesis", valueStr: ")"},
+					{_type: "or", valueStr: "or"},
+					{_type: "left_parenthesis", valueStr: "("},
+					{_type: "name", valueStr: "bar"},
+					{_type: "greater_equal", valueStr: ">="},
+					{_type: "decimal_literal", valueStr: "1.0"},
+					{_type: "right_parenthesis", valueStr: ")"},
 				},
 			},
 			wantErr: "",
@@ -194,7 +191,7 @@ func Test_checkParenthesesBalance(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		if tt.valid != checkParenthesesBalance(tt.tokens) {
+		if err := checkParenthesesBalance(tt.tokens); (err != nil) == tt.valid {
 			t.Errorf("expected balance test %d to be successful", i+1)
 		}
 	}
@@ -423,54 +420,54 @@ func Test_infixToPostfix(t *testing.T) {
 	tests := []test{
 		{
 			input: []token{
-				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", valueStr: "1"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "2"},
 			},
 			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "greater"},
 			},
 		},
 		{
 			input: []token{
-				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", valueStr: "1"},
 				{_type: "greater_equal"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "or"},
 				{_type: "left_parenthesis"},
-				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", valueStr: "3"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "right_parenthesis"},
 			},
 			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "greater_equal"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "greater"},
 				{_type: "or"},
 			},
 		},
 		{
 			input: []token{
-				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", valueStr: "1"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", valueStr: "3"},
 				{_type: "less"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "4"},
 			},
 			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "less"},
 				{_type: "or"},
 			},
@@ -478,76 +475,40 @@ func Test_infixToPostfix(t *testing.T) {
 		{
 			input: []token{
 				{_type: "left_parenthesis"},
-				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", valueStr: "1"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "or"},
 				{_type: "left_parenthesis"},
-				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", valueStr: "3"},
 				{_type: "less"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "5"},
+				{_type: "integer_literal", valueStr: "5"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "6"},
+				{_type: "integer_literal", valueStr: "6"},
 				{_type: "right_parenthesis"},
 				{_type: "and"},
 				{_type: "left_parenthesis"},
-				{_type: "integer_literal", value: "7"},
+				{_type: "integer_literal", valueStr: "7"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "8"},
+				{_type: "integer_literal", valueStr: "8"},
 				{_type: "right_parenthesis"},
 				{_type: "right_parenthesis"},
 			},
 			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "less"},
-				{_type: "integer_literal", value: "5"},
-				{_type: "integer_literal", value: "6"},
+				{_type: "integer_literal", valueStr: "5"},
+				{_type: "integer_literal", valueStr: "6"},
 				{_type: "greater"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "7"},
-				{_type: "integer_literal", value: "8"},
-				{_type: "greater"},
-				{_type: "and"},
-				{_type: "or"},
-			},
-		},
-		{
-			input: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "greater"},
-				{_type: "integer_literal", value: "2"},
-				{_type: "or"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "less"},
-				{_type: "integer_literal", value: "4"},
-				{_type: "or"},
-				{_type: "integer_literal", value: "5"},
-				{_type: "greater"},
-				{_type: "integer_literal", value: "6"},
-				{_type: "and"},
-				{_type: "integer_literal", value: "7"},
-				{_type: "greater"},
-				{_type: "integer_literal", value: "8"},
-			},
-			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
-				{_type: "greater"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "integer_literal", value: "4"},
-				{_type: "less"},
-				{_type: "or"},
-				{_type: "integer_literal", value: "5"},
-				{_type: "integer_literal", value: "6"},
-				{_type: "greater"},
-				{_type: "integer_literal", value: "7"},
-				{_type: "integer_literal", value: "8"},
+				{_type: "integer_literal", valueStr: "7"},
+				{_type: "integer_literal", valueStr: "8"},
 				{_type: "greater"},
 				{_type: "and"},
 				{_type: "or"},
@@ -555,38 +516,74 @@ func Test_infixToPostfix(t *testing.T) {
 		},
 		{
 			input: []token{
-				{_type: "left_parenthesis"},
-				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", valueStr: "1"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", valueStr: "3"},
 				{_type: "less"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "5"},
+				{_type: "integer_literal", valueStr: "5"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "6"},
-				{_type: "right_parenthesis"},
+				{_type: "integer_literal", valueStr: "6"},
 				{_type: "and"},
-				{_type: "integer_literal", value: "7"},
+				{_type: "integer_literal", valueStr: "7"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "8"},
+				{_type: "integer_literal", valueStr: "8"},
 			},
 			expected: []token{
-				{_type: "integer_literal", value: "1"},
-				{_type: "integer_literal", value: "2"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
 				{_type: "greater"},
-				{_type: "integer_literal", value: "3"},
-				{_type: "integer_literal", value: "4"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "integer_literal", valueStr: "4"},
 				{_type: "less"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "5"},
-				{_type: "integer_literal", value: "6"},
+				{_type: "integer_literal", valueStr: "5"},
+				{_type: "integer_literal", valueStr: "6"},
+				{_type: "greater"},
+				{_type: "integer_literal", valueStr: "7"},
+				{_type: "integer_literal", valueStr: "8"},
+				{_type: "greater"},
+				{_type: "and"},
+				{_type: "or"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", valueStr: "2"},
+				{_type: "or"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "less"},
+				{_type: "integer_literal", valueStr: "4"},
+				{_type: "or"},
+				{_type: "integer_literal", valueStr: "5"},
+				{_type: "greater"},
+				{_type: "integer_literal", valueStr: "6"},
+				{_type: "right_parenthesis"},
+				{_type: "and"},
+				{_type: "integer_literal", valueStr: "7"},
+				{_type: "greater"},
+				{_type: "integer_literal", valueStr: "8"},
+			},
+			expected: []token{
+				{_type: "integer_literal", valueStr: "1"},
+				{_type: "integer_literal", valueStr: "2"},
+				{_type: "greater"},
+				{_type: "integer_literal", valueStr: "3"},
+				{_type: "integer_literal", valueStr: "4"},
+				{_type: "less"},
+				{_type: "or"},
+				{_type: "integer_literal", valueStr: "5"},
+				{_type: "integer_literal", valueStr: "6"},
 				{_type: "greater"},
 				{_type: "or"},
-				{_type: "integer_literal", value: "7"},
-				{_type: "integer_literal", value: "8"},
+				{_type: "integer_literal", valueStr: "7"},
+				{_type: "integer_literal", valueStr: "8"},
 				{_type: "greater"},
 				{_type: "and"},
 			},

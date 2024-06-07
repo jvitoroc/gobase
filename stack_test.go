@@ -5,15 +5,13 @@ import "testing"
 func TestStack(t *testing.T) {
 	s := stack[token]{}
 
-	var noop token
-
 	tk := s.pop()
-	if tk != noop {
+	if tk != tokenNoop {
 		t.Error("expected empty value from an empty stack")
 		return
 	}
 
-	tk1 := token{value: "1"}
+	tk1 := token{valueStr: "1"}
 	s.push(tk1)
 
 	if tk := s.pop(); tk != tk1 {
@@ -21,8 +19,8 @@ func TestStack(t *testing.T) {
 		return
 	}
 
-	tk2 := token{value: "2"}
-	tk3 := token{value: "3"}
+	tk2 := token{valueStr: "2"}
+	tk3 := token{valueStr: "3"}
 	s.push(tk1)
 	s.push(tk3)
 	s.push(tk2)
@@ -42,7 +40,7 @@ func TestStack(t *testing.T) {
 		return
 	}
 
-	if tk := s.pop(); tk != noop {
+	if tk := s.pop(); tk != tokenNoop {
 		t.Error("expected empty value from an empty stack")
 		return
 	}

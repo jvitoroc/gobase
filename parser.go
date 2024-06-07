@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -125,9 +124,21 @@ func (t *tokenizer) getNextToken() *token {
 		for _, r := range tr.regexps {
 			match = r.FindString(s)
 			if match != "" {
+				firstHalf := t.query[:t.cursor]
+
+				column := strings.LastIndex(firstHalf, "\n") - len(firstHalf)
+				if column > 0 {
+					column = 1
+				} else {
+					column = column * -1
+				}
+
 				tk = &token{
-					_type: tr.name,
-					value: match,
+					_type:    tr.name,
+					valueStr: match,
+
+					line:   strings.Count(firstHalf, "\n") + 1,
+					column: column,
 				}
 				break
 			}
@@ -148,7 +159,9 @@ func (t *tokenizer) getNextToken() *token {
 	}
 
 	if tk._type == "string_literal" {
-		tk.value = tk.value[1 : len(tk.value)-1]
+		tk.valueStr = tk.valueStr[1 : len(tk.valueStr)-1]
+	} else {
+		tk.valueStr = strings.ToLower(tk.valueStr)
 	}
 
 	return tk
@@ -159,7 +172,7 @@ type parser struct {
 	lookahead *token
 }
 
-func (p *parser) Parse(q string) (*statement, error) {
+func (p *parser) parse(q string) (*statement, error) {
 	p.t = &tokenizer{query: q}
 
 	p.lookahead = p.t.getNextToken()
@@ -181,7 +194,7 @@ func (p *parser) statement() (*statement, error) {
 		}
 
 		if p.lookahead._type != "keyword" {
-			return nil, fmt.Errorf("expected keyword, but got '%s'", p.lookahead.value)
+			return nil, fmt.Errorf("expected keyword, but got '%s' at %d:%d", p.lookahead.valueStr, p.lookahead.line, p.lookahead.column)
 		}
 
 		token := *p.lookahead
@@ -192,7 +205,7 @@ func (p *parser) statement() (*statement, error) {
 		}
 
 		s.Parts = append(s.Parts, &Part{
-			Keyword: strings.ToLower(token.value),
+			Keyword: token.valueStr,
 			Body:    body,
 		})
 	}
@@ -201,7 +214,7 @@ func (p *parser) statement() (*statement, error) {
 }
 
 func (p *parser) partBody() (any, error) {
-	switch strings.ToLower(p.lookahead.value) {
+	switch p.lookahead.valueStr {
 	case "select":
 		return p.selectBody()
 	case "from":
@@ -210,7 +223,7 @@ func (p *parser) partBody() (any, error) {
 		return p.whereBody()
 	}
 
-	return nil, fmt.Errorf("expected a valid keyword, but got '%s'", p.lookahead.value)
+	return nil, fmt.Errorf("expected a valid keyword, but got '%s' at %d:%d", p.lookahead.valueStr, p.lookahead.line, p.lookahead.column)
 }
 
 func (p *parser) selectBody() (any, error) {
@@ -222,9 +235,9 @@ func (p *parser) selectBody() (any, error) {
 		}
 
 		if p.lookahead._type == "name" {
-			body = append(body, p.lookahead.value)
+			body = append(body, p.lookahead.valueStr)
 		} else {
-			return nil, fmt.Errorf("expected name, but got '%s'", p.lookahead._type)
+			return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead._type, p.lookahead.line, p.lookahead.column)
 		}
 
 		p.lookahead = p.t.getNextToken()
@@ -249,33 +262,12 @@ func (p *parser) fromBody() (any, error) {
 	}
 
 	if p.lookahead._type == "name" {
-		value := p.lookahead.value
+		value := p.lookahead.valueStr
 		p.lookahead = p.t.getNextToken()
 		return value, nil
 	}
 
-	return nil, fmt.Errorf("expected name, but got '%s'", p.lookahead.value)
-}
-
-var allowedPredicateTokens = []string{
-	"name",
-
-	"string_literal",
-	"integer_literal",
-	"decimal_literal",
-
-	"left_parenthesis",
-	"right_parenthesis",
-
-	"and",
-	"or",
-
-	"equal",
-	"not_equal",
-	"greater",
-	"greater_equal",
-	"less",
-	"less_equal",
+	return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead.valueStr, p.lookahead.line, p.lookahead.column)
 }
 
 func (p *parser) whereBody() (any, error) {
@@ -286,7 +278,7 @@ func (p *parser) whereBody() (any, error) {
 			break
 		}
 
-		if !slices.Contains(allowedPredicateTokens, p.lookahead._type) {
+		if !p.lookahead.isPredicateToken() {
 			break
 		}
 
@@ -297,8 +289,8 @@ func (p *parser) whereBody() (any, error) {
 		return nil, errors.New("expected predicate after WHERE, but got nothing")
 	}
 
-	if !checkParenthesesBalance(body) {
-		return nil, errors.New("expected closing of parenthesis") // fix me: this message is too generic
+	if err := checkParenthesesBalance(body); err != nil {
+		return nil, err
 	}
 
 	if err := checkBooleanExpressionSyntax(body); err != nil {
@@ -313,7 +305,6 @@ func infixToPostfix(tokens []token) []token {
 		return tokens
 	}
 
-	var noop token
 	s := stack[token]{}
 	postfix := make([]token, 0, len(tokens))
 
@@ -321,7 +312,7 @@ func infixToPostfix(tokens []token) []token {
 		if tk.isLeftParenthesis() {
 			s.push(tk)
 		} else if tk.isRightParenthesis() {
-			for tki := s.pop(); tki != noop; tki = s.pop() {
+			for tki := s.pop(); tki != tokenNoop; tki = s.pop() {
 				if tki.isLeftParenthesis() {
 					break
 				}
@@ -330,7 +321,7 @@ func infixToPostfix(tokens []token) []token {
 		} else if tk.isOperand() {
 			postfix = append(postfix, tk)
 		} else {
-			for tki := s.pop(); tki != noop; tki = s.pop() {
+			for tki := s.pop(); tki != tokenNoop; tki = s.pop() {
 				if tk.hasLowerOrSamePrecedenceThan(tki) && !tki.isLeftParenthesis() {
 					postfix = append(postfix, tki)
 					continue
@@ -342,7 +333,7 @@ func infixToPostfix(tokens []token) []token {
 		}
 	}
 
-	for tki := s.pop(); tki != noop; tki = s.pop() {
+	for tki := s.pop(); tki != tokenNoop; tki = s.pop() {
 		if !tki.isParenthesis() {
 			postfix = append(postfix, tki)
 		}
@@ -351,26 +342,26 @@ func infixToPostfix(tokens []token) []token {
 	return postfix
 }
 
-func checkParenthesesBalance(tokens []token) bool {
-	unclosedParentheses := 0
+func checkParenthesesBalance(tokens []token) error {
+	unclosedParentheses := stack[token]{}
 	for _, t := range tokens {
-		if t._type == "left_parenthesis" {
-			unclosedParentheses += 1
-		} else if t._type == "right_parenthesis" {
-			unclosedParentheses -= 1
-		}
-		if unclosedParentheses < 0 {
-			return false
+		if t.isLeftParenthesis() {
+			unclosedParentheses.push(t)
+		} else if t.isRightParenthesis() {
+			tk := unclosedParentheses.pop()
+			if tk == tokenNoop {
+				return fmt.Errorf("unexpected closing parenthesis at %d:%d", t.line, t.column)
+			}
 		}
 	}
 
-	return unclosedParentheses == 0
-}
+	if len(unclosedParentheses) > 0 {
+		tk := unclosedParentheses.pop()
+		return fmt.Errorf("opening parenthesis at %d:%d, but missing its closing parenthesis", tk.line, tk.column)
+	}
 
-var (
-	operands  = []string{"name", "decimal_literal", "integer_literal", "string_literal", "boolean_literal"}
-	operators = []string{"and", "or", "equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
-)
+	return nil
+}
 
 func checkBooleanExpressionSyntax(tokens []token) error {
 	if len(tokens) == 0 {
@@ -390,26 +381,26 @@ func checkBooleanExpressionSyntax(tokens []token) error {
 			continue
 		}
 
-		isOperand := slices.Contains(operands, t._type)
-		isOperator := slices.Contains(operators, t._type)
+		isOperand := t.isOperand()
+		isOperator := t.isComparisonOperator() || t.isLogicalOperator()
 		if !isOperand && !isOperator {
-			return fmt.Errorf("'%s' is not valid as part of an expression", t.value)
+			return fmt.Errorf("'%s' at %d:%d is not valid as part of an expression", t.valueStr, t.line, t.column)
 		}
 
 		if i == 0 && isOperator {
-			return fmt.Errorf("can't start expression with operator '%s'", t.value)
+			return fmt.Errorf("can't start expression with operator '%s' at %d:%d", t.valueStr, t.line, t.column)
 		}
 
 		if i == len(tokens)-1 && isOperator {
-			return fmt.Errorf("can't end expression with an operator '%s'", t.value)
+			return fmt.Errorf("can't end expression with an operator '%s' at %d:%d", t.valueStr, t.line, t.column)
 		}
 
 		if isPreviousOperand && isOperand {
-			return fmt.Errorf("expected operator after '%s'", previousToken.value)
+			return fmt.Errorf("expected operator after '%s' at %d:%d", previousToken.valueStr, t.line, t.column)
 		}
 
 		if isPreviousOperator && isOperator {
-			return fmt.Errorf("expected operand after '%s'", previousToken.value)
+			return fmt.Errorf("expected operand after '%s' at %d:%d", previousToken.valueStr, t.line, t.column)
 		}
 
 		previousToken = t
@@ -425,22 +416,22 @@ func checkParenthesesSyntax(tokens []token) error {
 	isPreviousRightParenthesis := false
 
 	for i, t := range tokens {
-		isOperand := slices.Contains(operands, t._type)
-		isOperator := slices.Contains(operators, t._type)
-		isLeftParenthesis := t._type == "left_parenthesis"
-		isRightParenthesis := t._type == "right_parenthesis"
+		isOperand := t.isOperand()
+		isOperator := t.isOperator()
+		isLeftParenthesis := t.isLeftParenthesis()
+		isRightParenthesis := t.isRightParenthesis()
 
 		if i > 0 {
 			if isPreviousLeftParenthesis && isOperator {
-				return errors.New("a left parenthesis can't precede an operator")
+				return fmt.Errorf("an operator is not allowed to be positioned at %d:%d after a opening parenthesis", t.line, t.column)
 			}
 
 			if isPreviousRightParenthesis && isOperand {
-				return errors.New("a right parenthesis can't precede an operand")
+				return fmt.Errorf("an operand is not allowed to be positioned at %d:%d after a closing parenthesis", t.line, t.column)
 			}
 
 			if isPreviousLeftParenthesis && isRightParenthesis {
-				return errors.New("empty parentheses")
+				return fmt.Errorf("empty parentheses at %d:%d", t.line, t.column)
 			}
 		}
 

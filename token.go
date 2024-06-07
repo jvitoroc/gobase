@@ -1,14 +1,19 @@
 package main
 
-import "slices"
+import (
+	"slices"
+)
 
 type token struct {
-	_type string
-	value string
+	_type    string
+	valueStr string
+	valueGo  any
 
 	line   int
 	column int
 }
+
+var tokenNoop token
 
 func (tk *token) isParenthesis() bool {
 	return tk.isLeftParenthesis() || tk.isRightParenthesis()
@@ -25,6 +30,7 @@ func (tk *token) isRightParenthesis() bool {
 var (
 	logicalOperators    = []string{"and", "or"}
 	comparisonOperators = []string{"equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
+	operands            = []string{"name", "decimal_literal", "integer_literal", "string_literal", "boolean_literal"}
 )
 
 var precedence = map[string]int{
@@ -52,6 +58,10 @@ func (tk *token) hasLowerOrSamePrecedenceThan(tk1 token) bool {
 	return l >= r
 }
 
+func (tk *token) isPredicateToken() bool {
+	return tk.isOperator() || tk.isOperand() || tk.isParenthesis()
+}
+
 func (tk *token) isLogicalOperator() bool {
 	return slices.Contains(logicalOperators, tk._type)
 }
@@ -62,4 +72,8 @@ func (tk *token) isComparisonOperator() bool {
 
 func (tk *token) isOperand() bool {
 	return slices.Contains(operands, tk._type)
+}
+
+func (tk *token) isOperator() bool {
+	return tk.isComparisonOperator() || tk.isLogicalOperator()
 }
