@@ -34,17 +34,13 @@ func TestQuery(t *testing.T) {
 			{
 				Keyword: "where",
 				Body: []token{
-					{_type: "left_parenthesis", value: "("},
 					{_type: "name", value: "foo"},
-					{_type: "equal", value: "=="},
 					{_type: "string_literal", value: "  bbbbasdasd asd asd "},
-					{_type: "right_parenthesis", value: ")"},
-					{_type: "or", value: "or"},
-					{_type: "left_parenthesis", value: "("},
+					{_type: "equal", value: "=="},
 					{_type: "name", value: "bar"},
-					{_type: "greater_equal", value: ">="},
 					{_type: "decimal_literal", value: "1.0"},
-					{_type: "right_parenthesis", value: ")"},
+					{_type: "greater_equal", value: ">="},
+					{_type: "or", value: "or"},
 				},
 			},
 		},
@@ -204,137 +200,403 @@ func Test_checkParenthesesBalance(t *testing.T) {
 	}
 }
 
-func Test_tokensToExpressionTree(t *testing.T) {
-	tests := []struct {
-		name       string
-		expression string
-		want       *expression
-	}{
-		// {
-		// 	name:       "test 1",
-		// 	expression: "foo == \"aaa\"",
-		// 	want: &expression{
-		// 		_type: "equal",
-		// 		value: "==",
-		// 		left: &expression{
-		// 			_type: "name",
-		// 			value: "foo",
-		// 		},
-		// 		right: &expression{
-		// 			_type: "string_literal",
-		// 			value: "aaa",
-		// 		},
-		// 	},
-		// },
-		// {
-		// 	name:       "test 2",
-		// 	expression: "foo == \"aaa\" and bar != true",
-		// 	want: &expression{
-		// 		_type: "and",
-		// 		value: "and",
-		// 		left: &expression{
-		// 			_type: "equal",
-		// 			value: "==",
-		// 			left: &expression{
-		// 				_type: "name",
-		// 				value: "foo",
-		// 			},
-		// 			right: &expression{
-		// 				_type: "string_literal",
-		// 				value: "aaa",
-		// 			},
-		// 		},
-		// 		right: &expression{
-		// 			_type: "not_equal",
-		// 			value: "!=",
-		// 			left: &expression{
-		// 				_type: "name",
-		// 				value: "bar",
-		// 			},
-		// 			right: &expression{
-		// 				_type: "boolean_literal",
-		// 				value: "true",
-		// 			},
-		// 		},
-		// 	},
-		// },
+// func Test_tokensToExpressionTree(t *testing.T) {
+// 	tests := []struct {
+// 		name       string
+// 		expression string
+// 		want       *expression
+// 	}{
+// 		{
+// 			name:       "test 1",
+// 			expression: "foo == \"aaa\"",
+// 			want: &expression{
+// 				_type: "equal",
+// 				value: "==",
+// 				left: &expression{
+// 					_type: "name",
+// 					value: "foo",
+// 				},
+// 				right: &expression{
+// 					_type: "string_literal",
+// 					value: "aaa",
+// 				},
+// 			},
+// 		},
+// 		{
+// 			name:       "test 2",
+// 			expression: "foo == \"aaa\" and bar != true",
+// 			want: &expression{
+// 				_type: "and",
+// 				value: "and",
+// 				left: &expression{
+// 					_type: "equal",
+// 					value: "==",
+// 					left: &expression{
+// 						_type: "name",
+// 						value: "foo",
+// 					},
+// 					right: &expression{
+// 						_type: "string_literal",
+// 						value: "aaa",
+// 					},
+// 				},
+// 				right: &expression{
+// 					_type: "not_equal",
+// 					value: "!=",
+// 					left: &expression{
+// 						_type: "name",
+// 						value: "bar",
+// 					},
+// 					right: &expression{
+// 						_type: "boolean_literal",
+// 						value: "true",
+// 					},
+// 				},
+// 			},
+// 		},
+// 		{
+// 			name:       "test 3",
+// 			expression: "(foo == \"aaa\") and ((bar != true and (aaa >= 34.12 OR foo == false)) or foo == 123)",
+// 			want: &expression{
+// 				_type: "and",
+// 				value: "and",
+// 				left: &expression{
+// 					_type: "equal",
+// 					value: "==",
+// 					left: &expression{
+// 						_type: "name",
+// 						value: "foo",
+// 					},
+// 					right: &expression{
+// 						_type: "string_literal",
+// 						value: "aaa",
+// 					},
+// 				},
+// 				right: &expression{
+// 					_type: "or",
+// 					value: "or",
+// 					left: &expression{
+// 						_type: "and",
+// 						value: "and",
+// 						left: &expression{
+// 							_type: "not_equal",
+// 							value: "!=",
+// 							left: &expression{
+// 								_type: "name",
+// 								value: "bar",
+// 							},
+// 							right: &expression{
+// 								_type: "boolean_literal",
+// 								value: "true",
+// 							},
+// 						},
+// 						right: &expression{
+// 							_type: "or",
+// 							value: "or",
+// 							left: &expression{
+// 								_type: "greater_equal",
+// 								value: ">=",
+// 								left: &expression{
+// 									_type: "name",
+// 									value: "aaa",
+// 								},
+// 								right: &expression{
+// 									_type: "decimal_literal",
+// 									value: "34.12",
+// 								},
+// 							},
+// 							right: &expression{
+// 								_type: "equal",
+// 								value: "==",
+// 								left: &expression{
+// 									_type: "name",
+// 									value: "foo",
+// 								},
+// 								right: &expression{
+// 									_type: "boolean_literal",
+// 									value: "false",
+// 								},
+// 							},
+// 						},
+// 					},
+// 					right: &expression{
+// 						_type: "equal",
+// 						value: "==",
+// 						left: &expression{
+// 							_type: "name",
+// 							value: "foo",
+// 						},
+// 						right: &expression{
+// 							_type: "integer_literal",
+// 							value: "123",
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 		{
+// 			name:       "test 4",
+// 			expression: "foo == \"aaa\" and ((bar != true and aaa >= 34.12) or foo == 123)",
+// 			want: &expression{
+// 				_type: "and",
+// 				value: "and",
+// 				left: &expression{
+// 					_type: "equal",
+// 					value: "==",
+// 					left: &expression{
+// 						_type: "name",
+// 						value: "foo",
+// 					},
+// 					right: &expression{
+// 						_type: "string_literal",
+// 						value: "aaa",
+// 					},
+// 				},
+// 				right: &expression{
+// 					_type: "or",
+// 					value: "or",
+// 					left: &expression{
+// 						_type: "and",
+// 						value: "and",
+// 						left: &expression{
+// 							_type: "not_equal",
+// 							value: "!=",
+// 							left: &expression{
+// 								_type: "name",
+// 								value: "bar",
+// 							},
+// 							right: &expression{
+// 								_type: "boolean_literal",
+// 								value: "true",
+// 							},
+// 						},
+// 						right: &expression{
+// 							_type: "greater_equal",
+// 							value: ">=",
+// 							left: &expression{
+// 								_type: "name",
+// 								value: "aaa",
+// 							},
+// 							right: &expression{
+// 								_type: "decimal_literal",
+// 								value: "34.12",
+// 							},
+// 						},
+// 					},
+// 					right: &expression{
+// 						_type: "equal",
+// 						value: "==",
+// 						left: &expression{
+// 							_type: "name",
+// 							value: "foo",
+// 						},
+// 						right: &expression{
+// 							_type: "integer_literal",
+// 							value: "123",
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			p := parser{
+// 				t: &tokenizer{
+// 					query: tt.expression,
+// 				},
+// 			}
+// 			tokens := p.mustTokenize()
+// 			got := tokensToExpressionTree(tokens)
+// 			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(expression{})); diff != "" {
+// 				t.Error(diff)
+// 			}
+// 		})
+// 	}
+// }
+
+func Test_infixToPostfix(t *testing.T) {
+	type test struct {
+		input    []token
+		expected []token
+	}
+	tests := []test{
 		{
-			name:       "test 3",
-			expression: "foo == \"aaa\" and ((bar != true and aaa >= 34.12) or foo == 123)",
-			want: &expression{
-				_type: "and",
-				value: "and",
-				left: &expression{
-					_type: "equal",
-					value: "==",
-					left: &expression{
-						_type: "name",
-						value: "foo",
-					},
-					right: &expression{
-						_type: "string_literal",
-						value: "aaa",
-					},
-				},
-				right: &expression{
-					_type: "or",
-					value: "or",
-					left: &expression{
-						_type: "and",
-						value: "and",
-						left: &expression{
-							_type: "not_equal",
-							value: "!=",
-							left: &expression{
-								_type: "name",
-								value: "bar",
-							},
-							right: &expression{
-								_type: "boolean_literal",
-								value: "true",
-							},
-						},
-						right: &expression{
-							_type: "greater_equal",
-							value: ">=",
-							left: &expression{
-								_type: "name",
-								value: "aaa",
-							},
-							right: &expression{
-								_type: "decimal_literal",
-								value: "34.12",
-							},
-						},
-					},
-					right: &expression{
-						_type: "equal",
-						value: "==",
-						left: &expression{
-							_type: "name",
-							value: "foo",
-						},
-						right: &expression{
-							_type: "integer_literal",
-							value: "123",
-						},
-					},
-				},
+			input: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "2"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater_equal"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "or"},
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "right_parenthesis"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater_equal"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "greater"},
+				{_type: "or"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "less"},
+				{_type: "integer_literal", value: "4"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "less"},
+				{_type: "or"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "or"},
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "less"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "right_parenthesis"},
+				{_type: "and"},
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "8"},
+				{_type: "right_parenthesis"},
+				{_type: "right_parenthesis"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "less"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "greater"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "integer_literal", value: "8"},
+				{_type: "greater"},
+				{_type: "and"},
+				{_type: "or"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "less"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "and"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "8"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "less"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "integer_literal", value: "8"},
+				{_type: "greater"},
+				{_type: "and"},
+				{_type: "or"},
+			},
+		},
+		{
+			input: []token{
+				{_type: "left_parenthesis"},
+				{_type: "integer_literal", value: "1"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "less"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "right_parenthesis"},
+				{_type: "and"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "8"},
+			},
+			expected: []token{
+				{_type: "integer_literal", value: "1"},
+				{_type: "integer_literal", value: "2"},
+				{_type: "greater"},
+				{_type: "integer_literal", value: "3"},
+				{_type: "integer_literal", value: "4"},
+				{_type: "less"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "5"},
+				{_type: "integer_literal", value: "6"},
+				{_type: "greater"},
+				{_type: "or"},
+				{_type: "integer_literal", value: "7"},
+				{_type: "integer_literal", value: "8"},
+				{_type: "greater"},
+				{_type: "and"},
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := parser{
-				t: &tokenizer{
-					query: tt.expression,
-				},
-			}
-			tokens := p.mustTokenize()
-			got := tokensToExpressionTree(tokens)
-			if diff := cmp.Diff(got, tt.want, cmp.AllowUnexported(expression{})); diff != "" {
-				t.Error(diff)
-			}
-		})
+
+	for i, tt := range tests {
+		got := infixToPostfix(tt.input)
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{})); diff != "" {
+			t.Errorf("test %d failed: %s", i+1, diff)
+		}
 	}
 }

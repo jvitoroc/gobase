@@ -98,13 +98,6 @@ var (
 	}
 )
 
-type expression struct {
-	_type string
-	value string
-	left  *expression
-	right *expression
-}
-
 type Part struct {
 	Keyword string
 	Body    any
@@ -117,15 +110,6 @@ type statement struct {
 type tokenizer struct {
 	query  string
 	cursor int
-}
-
-type token struct {
-	_type string
-	value string
-}
-
-func (tk *token) isParenthesis() bool {
-	return tk._type == "left_parenthesis" || tk._type == "right_parenthesis"
 }
 
 func (t *tokenizer) getNextToken() *token {
@@ -321,82 +305,50 @@ func (p *parser) whereBody() (any, error) {
 		return nil, err
 	}
 
-	return body, nil
+	return infixToPostfix(body), nil
 }
 
-var (
-	logicalOperators    = []string{"and", "or"}
-	comparisonOperators = []string{"equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
-)
-
-func tokensToExpressionTree(tokens []token) *expression {
+func infixToPostfix(tokens []token) []token {
 	if len(tokens) == 0 {
-		return nil
+		return tokens
 	}
 
-	if len(tokens) == 1 {
-		return &expression{
-			_type: tokens[0]._type,
-			value: tokens[0].value,
-		}
-	}
+	var noop token
+	s := stack[token]{}
+	postfix := make([]token, 0, len(tokens))
 
-	root := -1
-
-	for i, tk := range tokens {
-		if tk.isParenthesis() {
-			if root != -1 {
-				break
-			}
-		}
-		if slices.Contains(logicalOperators, tk._type) {
-			root = i
-		}
-	}
-
-	if root == -1 {
-		for i, tk := range tokens {
-			if tk.isParenthesis() {
-				if root != -1 {
+	for _, tk := range tokens {
+		if tk.isLeftParenthesis() {
+			s.push(tk)
+		} else if tk.isRightParenthesis() {
+			for tki := s.pop(); tki != noop; tki = s.pop() {
+				if tki.isLeftParenthesis() {
 					break
 				}
+				postfix = append(postfix, tki)
 			}
-			if slices.Contains(comparisonOperators, tk._type) {
-				root = i
-			}
-		}
-	}
-
-	if root == -1 {
-		for i, tk := range tokens {
-			if !tk.isParenthesis() {
-				root = i
+		} else if tk.isOperand() {
+			postfix = append(postfix, tk)
+		} else {
+			for tki := s.pop(); tki != noop; tki = s.pop() {
+				if tk.hasLowerOrSamePrecedenceThan(tki) && !tki.isLeftParenthesis() {
+					postfix = append(postfix, tki)
+					continue
+				}
+				s.push(tki)
 				break
 			}
+			s.push(tk)
 		}
 	}
 
-	if root == -1 {
-		return nil
+	for tki := s.pop(); tki != noop; tki = s.pop() {
+		if !tki.isParenthesis() {
+			postfix = append(postfix, tki)
+		}
 	}
 
-	left := tokens[0:root]
-	right := tokens[root+1:]
-
-	// if len(left) > 0 && left[0].isParenthesis() {
-	// 	left = left[1:]
-	// }
-
-	// if len(right) > 0 && right[len(right)-1].isParenthesis() {
-	// 	right = right[0 : len(right)-1]
-	// }
-
-	return &expression{
-		_type: tokens[root]._type,
-		value: tokens[root].value,
-		left:  tokensToExpressionTree(left),
-		right: tokensToExpressionTree(right),
-	}
+	return postfix
 }
 
 func checkParenthesesBalance(tokens []token) bool {
@@ -434,7 +386,7 @@ func checkBooleanExpressionSyntax(tokens []token) error {
 	isPreviousOperator := false
 
 	for i, t := range tokens {
-		if t._type == "left_parenthesis" || t._type == "right_parenthesis" {
+		if t.isParenthesis() {
 			continue
 		}
 
