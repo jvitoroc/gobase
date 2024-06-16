@@ -11,7 +11,7 @@ func TestStack(t *testing.T) {
 		return
 	}
 
-	tk1 := token{valueStr: "1"}
+	tk1 := token{strValue: "1"}
 	s.push(tk1)
 
 	if tk := s.pop(); tk != tk1 {
@@ -19,8 +19,8 @@ func TestStack(t *testing.T) {
 		return
 	}
 
-	tk2 := token{valueStr: "2"}
-	tk3 := token{valueStr: "3"}
+	tk2 := token{strValue: "2"}
+	tk3 := token{strValue: "3"}
 	s.push(tk1)
 	s.push(tk3)
 	s.push(tk2)

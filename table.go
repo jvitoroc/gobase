@@ -11,16 +11,12 @@ import (
 	"strconv"
 )
 
-type Schema struct {
-	Tables []*Table
-}
-
 type columnType string
 
 const (
-	StringType columnType = "STRING"
-	BoolType   columnType = "BOOLEAN"
-	Int32Type  columnType = "INTEGER_32"
+	StringType columnType = "string"
+	BoolType   columnType = "bool"
+	Int32Type  columnType = "int"
 )
 
 func checkValueType(_type columnType, value string) bool {
@@ -55,9 +51,9 @@ func blobToGoType(_type columnType, value []byte) (any, error) {
 	case Int32Type:
 		v := binary.LittleEndian.Uint32(value)
 		if value[4] == 1 {
-			return int32(v), nil
+			return float64(int32(v)), nil
 		} else {
-			return int32(v) * -1, nil
+			return float64(int32(v) * -1), nil
 		}
 	case StringType:
 		return string(value), nil
@@ -94,9 +90,13 @@ func stringToBlob(_type columnType, value string) ([]byte, error) {
 }
 
 type Table struct {
-	ID      string
+	ID      uint32
 	Name    string
 	Columns []*Column
+}
+
+func (t *Table) fileName() string {
+	return strconv.FormatUint(uint64(t.ID), 10)
 }
 
 func (t *Table) insert(values []string) error {
@@ -113,46 +113,70 @@ func (t *Table) insert(values []string) error {
 	return t.write(values)
 }
 
-func (t *Table) read() error {
-	file, err := os.OpenFile(t.ID, os.O_RDONLY|os.O_CREATE, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
+type deserializedRow struct {
+	columns []*deserializedColumn
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ch := t.createReader(ctx, file)
-
-	for row := range ch {
-		switch r := row.(type) {
-		case []byte:
-			a, _ := t.deserializeRow(r)
-			b, _ := t.deserializeColumns(a)
-			fmt.Println(b)
-		case error:
-			fmt.Println(r)
+func (d *deserializedRow) getColumn(name string) *deserializedColumn {
+	for _, c := range d.columns {
+		if c.Name == name {
+			return c
 		}
 	}
 
 	return nil
 }
 
-type simpleColumn struct {
-	name  string
+func (t *Table) read(ctx context.Context, wr io.Writer, columns []string, filter func(*deserializedRow) bool) error {
+	file, err := os.OpenFile(t.fileName(), os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	ch := t.createReader(ctx, file)
+
+	go func() {
+		for row := range ch {
+			switch r := row.(type) {
+			case []byte:
+				dr, err := t.deserializeRow(r)
+				if err != nil {
+					// wr.Write(err)
+				}
+
+				_, err = t.deserializeColumns(dr)
+				if err != nil {
+					// wr.Write(err)
+				}
+
+				// if filter(dc) {
+				// 	// wr.Write(dc)
+				// }
+			case error:
+				// wr.Write(err)
+			}
+		}
+	}()
+
+	return nil
+}
+
+type deserializedColumn struct {
+	*Column
 	value any
 }
 
-func (t *Table) deserializeColumns(row map[uint32][]byte) ([]simpleColumn, error) {
-	sc := make([]simpleColumn, 0, len(t.Columns))
+func (t *Table) deserializeColumns(row map[uint32][]byte) ([]*deserializedColumn, error) {
+	sc := make([]*deserializedColumn, 0, len(t.Columns))
 	for _, c := range t.Columns {
 		v, err := blobToGoType(c.Type, row[c.ID])
 		if err != nil {
 			return nil, err
 		}
-		sc = append(sc, simpleColumn{
-			name:  c.Name,
-			value: v,
+		sc = append(sc, &deserializedColumn{
+			Column: c,
+			value:  v,
 		})
 	}
 
@@ -260,7 +284,7 @@ func (t *Table) convertValuesToBlob(values []string) ([][]byte, error) {
 }
 
 func (t *Table) write(values []string) error {
-	file, err := os.OpenFile(t.ID, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
+	file, err := os.OpenFile(t.fileName(), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}

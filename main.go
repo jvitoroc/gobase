@@ -19,7 +19,9 @@ func main() {
 	}
 	defer storeSchema(sch)
 
-	sch.Tables[0].read()
+	sch.fs = newMemFs()
+
+	// sch.Tables[0].read()
 
 	err = sch.Tables[0].insert([]string{"f", "0"})
 	if err != nil {

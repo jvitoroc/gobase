@@ -2,12 +2,13 @@ package main
 
 import (
 	"slices"
+	"strconv"
 )
 
 type token struct {
 	_type    string
-	valueStr string
-	valueGo  any
+	strValue string
+	goValue  any
 
 	line   int
 	column int
@@ -30,7 +31,7 @@ func (tk *token) isRightParenthesis() bool {
 var (
 	logicalOperators    = []string{"and", "or"}
 	comparisonOperators = []string{"equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
-	operands            = []string{"name", "decimal_literal", "integer_literal", "string_literal", "boolean_literal"}
+	operands            = []string{"name", "number_literal", "number_literal", "string_literal", "boolean_literal"}
 )
 
 var precedence = map[string]int{
@@ -76,4 +77,17 @@ func (tk *token) isOperand() bool {
 
 func (tk *token) isOperator() bool {
 	return tk.isComparisonOperator() || tk.isLogicalOperator()
+}
+
+func (tk *token) convertToGoType() (v any, err error) {
+	switch tk._type {
+	case "number_literal":
+		v, err = strconv.ParseFloat(tk.strValue, 64)
+	case "boolean_literal":
+		v, err = strconv.ParseBool(tk.strValue)
+	case "string_literal":
+		v = tk.strValue
+	}
+
+	return
 }
