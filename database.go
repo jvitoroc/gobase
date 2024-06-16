@@ -2,42 +2,130 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
 )
 
 type database struct {
 	schema *Schema
 }
 
-func (d *database) run(batch string) (io.Reader, error) {
-	p := &parser{}
-	s, err := p.parse(batch)
+func (d *database) initialize(rootDir string) error {
+	file, err := os.OpenFile(path.Join(rootDir, "schema"), os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	sch := &Schema{rootDir: rootDir}
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(sch)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
 	}
 
-	if len(s.Parts) == 0 {
-		return nil, errors.New("empty batch")
-	}
+	d.schema = sch
 
-	switch s.Parts[0].Keyword {
-	case "select":
-		return d.selectStatement(s)
-	}
-
-	return nil, nil
+	return nil
 }
 
-func (d *database) selectStatement(s *statement) (io.Reader, error) {
+func (d *database) run(r io.Writer, batch string) error {
+	p := &parser{}
+	sts, err := p.parse(batch)
+	if err != nil {
+		return err
+	}
+
+	if len(sts) == 0 {
+		return errors.New("empty batch")
+	}
+
+	for i, s := range sts {
+		if len(s.Parts) == 0 {
+			return fmt.Errorf("empty statement #%d", i+1)
+		}
+
+		switch s.Parts[0].Keyword {
+		case "create table":
+			return d.createTableStatement(r, s)
+		case "select":
+			return d.selectStatement(r, s)
+		case "insert into":
+			return d.insertIntoStatement(r, s)
+		default:
+			return fmt.Errorf("invalid statement #%d", i+1)
+		}
+	}
+
+	return nil
+}
+
+func (d *database) createTableStatement(r io.Writer, s *statement) error {
+	if err := validateCreateTableStatement(s); err != nil {
+		return err
+	}
+
+	tableName := ""
+	var columns []*newColumn
+
+	for _, p := range s.Parts {
+		switch p.Keyword {
+		case "create table":
+			tableName = p.Body.(string)
+		case "definitions":
+			columns = p.Body.([]*newColumn)
+		}
+	}
+
+	_, err := d.schema.createTable(tableName, columns)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
+	if err := validateInsertIntoStatement(s); err != nil {
+		return err
+	}
+
+	tableName := ""
+	var values []string
+
+	for _, p := range s.Parts {
+		switch p.Keyword {
+		case "insert into":
+			tableName = p.Body.(string)
+		case "values":
+			values = p.Body.([]string)
+		}
+	}
+
+	t := d.schema.getTable(tableName)
+	if t == nil {
+		return fmt.Errorf("table with name '%s' does not exist", tableName)
+	}
+
+	err := t.insert(values)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *database) selectStatement(r io.Writer, s *statement) error {
 	if err := validateSelectStatement(s); err != nil {
-		return nil, err
+		return err
 	}
 
 	tableName := ""
 	var returningColumns []string
-	// var postfixExpression []token
+	var filter *expression
 
 	for _, p := range s.Parts {
 		switch p.Keyword {
@@ -46,23 +134,34 @@ func (d *database) selectStatement(s *statement) (io.Reader, error) {
 		case "from":
 			tableName, _ = p.Body.(string)
 		case "where":
-			// postfixExpression, _ = p.Body.([]token)
+			filter, _ = p.Body.(*expression)
 		}
 	}
 
 	t := d.schema.getTable(tableName)
 	if t == nil {
-		return nil, fmt.Errorf("table '%s' does not exist", tableName)
+		return fmt.Errorf("table with name '%s' does not exist", tableName)
 	}
 
-	r, w := io.Pipe()
+	err := t.read(context.Background(), r, returningColumns, func(row *deserializedRow) (bool, error) {
+		r, err := evaluateBooleanExpressionAgainstRow(row, filter)
+		if err != nil {
+			return false, err
+		}
 
-	err := t.read(context.Background(), w, returningColumns, func(row *deserializedRow) bool { return true })
+		if res, ok := r.goValue.(bool); ok {
+			if ok {
+				return res, nil
+			}
+		}
+
+		return false, errors.New("WHERE clause is invalid, must result in a boolean result")
+	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return r, nil
+	return nil
 }
 
 type result struct {
@@ -91,7 +190,7 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{
-				goValue: c.value,
+				goValue: c.Value,
 			}, nil
 		} else {
 			return &result{
@@ -269,7 +368,7 @@ func validateSelectStatement(s *statement) error {
 	for _, p := range s.Parts {
 		switch p.Keyword {
 		case "select":
-			b, ok := p.Body.([]string)
+			b, ok := p.Body.([]*expression)
 			if !ok {
 				return errors.New("invalid type for SELECT body")
 			}
@@ -308,6 +407,90 @@ func validateSelectStatement(s *statement) error {
 
 	if !hasFrom {
 		return errors.New("missing FROM clause")
+	}
+
+	return nil
+}
+
+func validateCreateTableStatement(s *statement) error {
+	hasCreateTable := false
+	hasDefinitions := false
+
+	for _, p := range s.Parts {
+		switch p.Keyword {
+		case "create table":
+			b, ok := p.Body.(string)
+			if !ok {
+				return errors.New("invalid name for table")
+			}
+
+			if len(b) == 0 {
+				return errors.New("must provide name for table")
+			}
+
+			hasCreateTable = true
+		case "definitions":
+			b, ok := p.Body.([]*newColumn)
+			if !ok {
+				return errors.New("invalid definitions")
+			}
+
+			if len(b) == 0 {
+				return errors.New("must provide definitions for table")
+			}
+
+			hasDefinitions = true
+		}
+	}
+
+	if !hasCreateTable {
+		return errors.New("missing CREATE TABLE clause")
+	}
+
+	if !hasDefinitions {
+		return errors.New("missing DEFINITIONS clause")
+	}
+
+	return nil
+}
+
+func validateInsertIntoStatement(s *statement) error {
+	hasInsertInto := false
+	hasValues := false
+
+	for _, p := range s.Parts {
+		switch p.Keyword {
+		case "insert into":
+			b, ok := p.Body.(string)
+			if !ok {
+				return errors.New("invalid table name")
+			}
+
+			if len(b) == 0 {
+				return errors.New("must provide table name for writing")
+			}
+
+			hasInsertInto = true
+		case "values":
+			b, ok := p.Body.([]string)
+			if !ok {
+				return errors.New("invalid values")
+			}
+
+			if len(b) == 0 {
+				return errors.New("must provide values to be insert into table")
+			}
+
+			hasValues = true
+		}
+	}
+
+	if !hasInsertInto {
+		return errors.New("missing INSERT INTO clause")
+	}
+
+	if !hasValues {
+		return errors.New("missing VALUES clause")
 	}
 
 	return nil

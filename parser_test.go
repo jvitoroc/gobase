@@ -11,51 +11,53 @@ var (
 	rightParenthesis = token{_type: "right_parenthesis", strValue: "("}
 )
 
-func TestSelect(t *testing.T) {
+func TestRidiculousSelect(t *testing.T) {
 	p := &parser{}
 	q, err := p.parse(`SELeCT foo    , bar    FROM       jobs  where (foo == 
 		 "  bbbbasdasd asd asd ") or (bar >= 1.0);`)
 	if err != nil {
 		t.Error(err)
 	}
-	diff := cmp.Diff(q, &statement{
-		Parts: []*Part{
-			{
-				Keyword: "select",
-				Body: []*expression{
-					{_type: "operand", valueType: "name", strValue: "foo"},
-					{_type: "operand", valueType: "name", strValue: "bar"},
-				},
-			},
-			{
-				Keyword: "from",
-				Body:    "jobs",
-			},
-			{
-				Keyword: "where",
-				Body: &expression{
-					_type:    "operator",
-					operator: "or",
-					left: &expression{
-						_type:    "operator",
-						operator: "equal",
-						left:     &expression{_type: "operand", valueType: "name", strValue: "foo"},
-						right: &expression{
-							_type:     "operand",
-							valueType: "string_literal",
-							strValue:  "  bbbbasdasd asd asd ",
-							goValue:   string("  bbbbasdasd asd asd "),
-						},
+	diff := cmp.Diff(q, []*statement{
+		{
+			Parts: []*Part{
+				{
+					Keyword: "select",
+					Body: []*expression{
+						{_type: "operand", valueType: "name", strValue: "foo"},
+						{_type: "operand", valueType: "name", strValue: "bar"},
 					},
-					right: &expression{
+				},
+				{
+					Keyword: "from",
+					Body:    "jobs",
+				},
+				{
+					Keyword: "where",
+					Body: &expression{
 						_type:    "operator",
-						operator: "greater_equal",
-						left:     &expression{_type: "operand", valueType: "name", strValue: "bar"},
+						operator: "or",
+						left: &expression{
+							_type:    "operator",
+							operator: "equal",
+							left:     &expression{_type: "operand", valueType: "name", strValue: "foo"},
+							right: &expression{
+								_type:     "operand",
+								valueType: "string_literal",
+								strValue:  "  bbbbasdasd asd asd ",
+								goValue:   string("  bbbbasdasd asd asd "),
+							},
+						},
 						right: &expression{
-							_type:     "operand",
-							valueType: "number_literal",
-							strValue:  "1.0",
-							goValue:   float64(1),
+							_type:    "operator",
+							operator: "greater_equal",
+							left:     &expression{_type: "operand", valueType: "name", strValue: "bar"},
+							right: &expression{
+								_type:     "operand",
+								valueType: "number_literal",
+								strValue:  "1.0",
+								goValue:   float64(1),
+							},
 						},
 					},
 				},
@@ -71,24 +73,167 @@ func TestCreateTable(t *testing.T) {
 	p := &parser{}
 	q, err := p.parse(`
 		CREATE TABLE foo DEFINITIONS (
-			bar bool,
-			foobar int
+			foo bool,
+			bar int,
+			baz string
 		);
 	`)
 	if err != nil {
 		t.Error(err)
 	}
-	diff := cmp.Diff(q, &statement{
-		Parts: []*Part{
-			{
-				Keyword: "create table",
-				Body:    "foo",
+	diff := cmp.Diff(q, []*statement{
+		{
+			Parts: []*Part{
+				{
+					Keyword: "create table",
+					Body:    "foo",
+				},
+				{
+					Keyword: "definitions",
+					Body: []*Column{
+						{Name: "foo", Type: BoolType},
+						{Name: "bar", Type: Int32Type},
+						{Name: "baz", Type: StringType},
+					},
+				},
 			},
-			{
-				Keyword: "definitions",
-				Body: []*Column{
-					{Name: "bar", Type: BoolType},
-					{Name: "foobar", Type: Int32Type},
+		},
+	}, cmp.AllowUnexported(token{}, expression{}))
+	if diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestInsertInto(t *testing.T) {
+	p := &parser{}
+	q, err := p.parse(`
+		INSERT INTO foo VALUES (true, 123, "foobarbaz");
+	`)
+	if err != nil {
+		t.Error(err)
+	}
+	diff := cmp.Diff(q, []*statement{
+		{
+			Parts: []*Part{
+				{
+					Keyword: "insert into",
+					Body:    "foo",
+				},
+				{
+					Keyword: "values",
+					Body: []string{
+						"true",
+						"123",
+						"foobarbaz",
+					},
+				},
+			},
+		},
+	}, cmp.AllowUnexported(token{}, expression{}))
+	if diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestMultipleStatements(t *testing.T) {
+	p := &parser{}
+	q, err := p.parse(`
+		CREATE TABLE foo DEFINITIONS (
+			foo bool,
+			bar int,
+			baz string
+		);
+
+		INSERT INTO foo VALUES (true, 123, "foobarbaz");
+
+		SELECT foo, bar, baz FROM foo WHERE foo != false AND bar > 100;
+	`)
+	if err != nil {
+		t.Error(err)
+	}
+	diff := cmp.Diff(q, []*statement{
+		{
+			Parts: []*Part{
+				{
+					Keyword: "create table",
+					Body:    "foo",
+				},
+				{
+					Keyword: "definitions",
+					Body: []*Column{
+						{Name: "foo", Type: BoolType},
+						{Name: "bar", Type: Int32Type},
+						{Name: "baz", Type: StringType},
+					},
+				},
+			},
+		},
+		{
+			Parts: []*Part{
+				{
+					Keyword: "insert into",
+					Body:    "foo",
+				},
+				{
+					Keyword: "values",
+					Body: []string{
+						"true",
+						"123",
+						"foobarbaz",
+					},
+				},
+			},
+		},
+		{
+			Parts: []*Part{
+				{
+					Keyword: "select",
+					Body: []*expression{
+						{_type: Operand, valueType: "name", strValue: "foo"},
+						{_type: Operand, valueType: "name", strValue: "bar"},
+						{_type: Operand, valueType: "name", strValue: "baz"},
+					},
+				},
+				{
+					Keyword: "from",
+					Body:    "foo",
+				},
+				{
+					Keyword: "where",
+					Body: &expression{
+						_type:    Operator,
+						operator: "and",
+						left: &expression{
+							_type:    Operator,
+							operator: "not_equal",
+							left: &expression{
+								_type:     Operand,
+								valueType: "name",
+								strValue:  "foo",
+							},
+							right: &expression{
+								_type:     Operand,
+								valueType: "boolean_literal",
+								strValue:  "false",
+								goValue:   false,
+							},
+						},
+						right: &expression{
+							_type:    Operator,
+							operator: "greater",
+							left: &expression{
+								_type:     Operand,
+								valueType: "name",
+								strValue:  "bar",
+							},
+							right: &expression{
+								_type:     Operand,
+								valueType: "number_literal",
+								strValue:  "100",
+								goValue:   float64(100),
+							},
+						},
+					},
 				},
 			},
 		},

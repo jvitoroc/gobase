@@ -11,7 +11,7 @@ type Schema struct {
 	mu     sync.Mutex
 	Tables []*Table
 
-	fs Filesystem
+	rootDir string
 }
 
 type newColumn struct {
@@ -40,6 +40,8 @@ func (s *Schema) createTable(name string, columns []*newColumn) (*Table, error) 
 		ID:      uuid.New().ID(),
 		Name:    name,
 		Columns: c,
+
+		rootDir: s.rootDir,
 	}
 
 	s.Tables = append(s.Tables, t)

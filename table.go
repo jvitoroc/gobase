@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -93,10 +95,12 @@ type Table struct {
 	ID      uint32
 	Name    string
 	Columns []*Column
+
+	rootDir string
 }
 
 func (t *Table) fileName() string {
-	return strconv.FormatUint(uint64(t.ID), 10)
+	return path.Join(t.rootDir, strconv.FormatUint(uint64(t.ID), 10))
 }
 
 func (t *Table) insert(values []string) error {
@@ -114,11 +118,11 @@ func (t *Table) insert(values []string) error {
 }
 
 type deserializedRow struct {
-	columns []*deserializedColumn
+	Columns []*deserializedColumn
 }
 
 func (d *deserializedRow) getColumn(name string) *deserializedColumn {
-	for _, c := range d.columns {
+	for _, c := range d.Columns {
 		if c.Name == name {
 			return c
 		}
@@ -127,60 +131,67 @@ func (d *deserializedRow) getColumn(name string) *deserializedColumn {
 	return nil
 }
 
-func (t *Table) read(ctx context.Context, wr io.Writer, columns []string, filter func(*deserializedRow) bool) error {
-	file, err := os.OpenFile(t.fileName(), os.O_RDONLY|os.O_CREATE, 0666)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
+func (t *Table) read(ctx context.Context, wr io.Writer, columns []string, filter func(*deserializedRow) (bool, error)) error {
+	ch := t.createReader(ctx)
 
-	ch := t.createReader(ctx, file)
-
-	go func() {
-		for row := range ch {
-			switch r := row.(type) {
-			case []byte:
-				dr, err := t.deserializeRow(r)
-				if err != nil {
-					// wr.Write(err)
-				}
-
-				_, err = t.deserializeColumns(dr)
-				if err != nil {
-					// wr.Write(err)
-				}
-
-				// if filter(dc) {
-				// 	// wr.Write(dc)
-				// }
-			case error:
-				// wr.Write(err)
+	for row := range ch {
+		switch r := row.(type) {
+		case []byte:
+			r1, err := t.deserializeRow(r)
+			if err != nil {
+				wr.Write([]byte(err.Error()))
+				return nil
 			}
+
+			r2, err := t.deserializeColumns(r1)
+			if err != nil {
+				wr.Write([]byte(err.Error()))
+				return nil
+			}
+
+			b, err := json.Marshal(r2)
+			if err != nil {
+				wr.Write([]byte(err.Error()))
+				return nil
+			}
+
+			filterResult, err := filter(r2)
+			if err != nil {
+				wr.Write([]byte(err.Error()))
+			}
+
+			if filterResult {
+				wr.Write(b)
+			}
+		case error:
+			wr.Write([]byte(r.Error()))
 		}
-	}()
+	}
 
 	return nil
 }
 
 type deserializedColumn struct {
 	*Column
-	value any
+	Value any
 }
 
-func (t *Table) deserializeColumns(row map[uint32][]byte) ([]*deserializedColumn, error) {
-	sc := make([]*deserializedColumn, 0, len(t.Columns))
+func (t *Table) deserializeColumns(row map[uint32][]byte) (*deserializedRow, error) {
+	r := &deserializedRow{
+		Columns: make([]*deserializedColumn, 0, len(t.Columns)),
+	}
 	for _, c := range t.Columns {
 		v, err := blobToGoType(c.Type, row[c.ID])
 		if err != nil {
 			return nil, err
 		}
-		sc = append(sc, &deserializedColumn{
+		r.Columns = append(r.Columns, &deserializedColumn{
 			Column: c,
-			value:  v,
+			Value:  v,
 		})
 	}
 
-	return sc, nil
+	return r, nil
 }
 
 func (t *Table) deserializeRow(row []byte) (map[uint32][]byte, error) {
@@ -219,10 +230,15 @@ func (t *Table) deserializeRow(row []byte) (map[uint32][]byte, error) {
 	return mappedRow, nil
 }
 
-func (t *Table) createReader(ctx context.Context, file *os.File) chan any {
+func (t *Table) createReader(ctx context.Context) chan any {
 	ch := make(chan any, 1)
 
 	go func() {
+		file, err := os.OpenFile(t.fileName(), os.O_RDONLY|os.O_CREATE, 0666)
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
 		defer close(ch)
 
 		for {

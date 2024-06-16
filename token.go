@@ -31,7 +31,7 @@ func (tk *token) isRightParenthesis() bool {
 var (
 	logicalOperators    = []string{"and", "or"}
 	comparisonOperators = []string{"equal", "not_equal", "greater_equal", "greater", "less", "less_equal"}
-	operands            = []string{"name", "number_literal", "number_literal", "string_literal", "boolean_literal"}
+	operands            = []string{"name", "number_literal", "string_literal", "boolean_literal"}
 )
 
 var precedence = map[string]int{
@@ -77,6 +77,12 @@ func (tk *token) isOperand() bool {
 
 func (tk *token) isOperator() bool {
 	return tk.isComparisonOperator() || tk.isLogicalOperator()
+}
+
+var literalTypes = []string{"number_literal", "string_literal", "boolean_literal"}
+
+func (tk *token) isLiteral() bool {
+	return slices.Contains(literalTypes, tk._type)
 }
 
 func (tk *token) convertToGoType() (v any, err error) {
