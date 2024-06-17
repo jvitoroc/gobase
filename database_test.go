@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"reflect"
 	"testing"
 
@@ -34,6 +33,7 @@ func TestSimplestEndToEnd(t *testing.T) {
 
 	err = database.run(buf, `
 		INSERT INTO foo VALUES (true, 123, "foobarbaz");
+		INSERT INTO foo VALUES (true, 312, "aaa");
 	`)
 	if err != nil {
 		t.Error(err)
@@ -50,6 +50,7 @@ func TestSimplestEndToEnd(t *testing.T) {
 
 	t.Error(buf)
 }
+
 func TestDatabaseCreateTable(t *testing.T) {
 	database := database{}
 	err := database.initialize(t.TempDir())
@@ -58,7 +59,7 @@ func TestDatabaseCreateTable(t *testing.T) {
 		return
 	}
 
-	err = database.run(&io.PipeWriter{}, `
+	err = database.run(&bytes.Buffer{}, `
 		CREATE TABLE foo DEFINITIONS (
 			foo bool,
 			bar int,
@@ -94,6 +95,7 @@ func TestDatabaseCreateTable(t *testing.T) {
 		expectedTable,
 		cmpopts.IgnoreFields(Table{}, "ID"),
 		cmpopts.IgnoreFields(Column{}, "ID"),
+		cmpopts.IgnoreUnexported(Table{}),
 	); diff != "" {
 		t.Error(diff)
 		return

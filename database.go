@@ -33,8 +33,8 @@ func (d *database) initialize(rootDir string) error {
 }
 
 func (d *database) run(r io.Writer, batch string) error {
-	p := &parser{}
-	sts, err := p.parse(batch)
+	p := newParser(batch)
+	sts, err := p.parse()
 	if err != nil {
 		return err
 	}
@@ -44,17 +44,23 @@ func (d *database) run(r io.Writer, batch string) error {
 	}
 
 	for i, s := range sts {
-		if len(s.Parts) == 0 {
+		if len(s.Clauses) == 0 {
 			return fmt.Errorf("empty statement #%d", i+1)
 		}
 
-		switch s.Parts[0].Keyword {
+		switch s.Clauses[0].Name {
 		case "create table":
-			return d.createTableStatement(r, s)
+			if err := d.createTableStatement(r, s); err != nil {
+				return err
+			}
 		case "select":
-			return d.selectStatement(r, s)
+			if err := d.selectStatement(r, s); err != nil {
+				return err
+			}
 		case "insert into":
-			return d.insertIntoStatement(r, s)
+			if err := d.insertIntoStatement(r, s); err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("invalid statement #%d", i+1)
 		}
@@ -71,8 +77,8 @@ func (d *database) createTableStatement(r io.Writer, s *statement) error {
 	tableName := ""
 	var columns []*newColumn
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "create table":
 			tableName = p.Body.(string)
 		case "definitions":
@@ -96,8 +102,8 @@ func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
 	tableName := ""
 	var values []string
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "insert into":
 			tableName = p.Body.(string)
 		case "values":
@@ -127,8 +133,8 @@ func (d *database) selectStatement(r io.Writer, s *statement) error {
 	var returningColumns []string
 	var filter *expression
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "select":
 			returningColumns, _ = p.Body.([]string)
 		case "from":
@@ -365,8 +371,8 @@ func validateSelectStatement(s *statement) error {
 	hasSelect := false
 	hasFrom := false
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "select":
 			b, ok := p.Body.([]*expression)
 			if !ok {
@@ -416,8 +422,8 @@ func validateCreateTableStatement(s *statement) error {
 	hasCreateTable := false
 	hasDefinitions := false
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "create table":
 			b, ok := p.Body.(string)
 			if !ok {
@@ -458,8 +464,8 @@ func validateInsertIntoStatement(s *statement) error {
 	hasInsertInto := false
 	hasValues := false
 
-	for _, p := range s.Parts {
-		switch p.Keyword {
+	for _, p := range s.Clauses {
+		switch p.Name {
 		case "insert into":
 			b, ok := p.Body.(string)
 			if !ok {

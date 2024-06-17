@@ -3,177 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"strings"
 )
 
-type tokenRegexps struct {
-	name    string
-	regexps []*regexp.Regexp
-}
-
-var (
-	regexps = []*tokenRegexps{
-		{
-			name:    "keyword",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^(SELECT|FROM|(INSERT\s+INTO)|WHERE|(CREATE\s+TABLE)|DEFINITIONS|VALUES)\b`)},
-		},
-		{
-			name:    "comma",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^,`)},
-		},
-		{
-			name:    "boolean_literal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^(TRUE|FALSE)\b`)},
-		},
-		{
-			name:    "string_literal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^"([^"]*)"`)},
-		},
-		{
-			name:    "number_literal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\d+(\.\d+)?`)},
-		},
-		{
-			name:    "left_parenthesis",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\(`)},
-		},
-		{
-			name:    "right_parenthesis",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\)`)},
-		},
-		{
-			name:    "and",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^AND\b`)},
-		},
-		{
-			name:    "or",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^OR\b`)},
-		},
-		{
-			name:    "equal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^==`)},
-		},
-		{
-			name:    "not_equal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^!=`)},
-		},
-		{
-			name:    "greater_equal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^>=`)},
-		},
-		{
-			name:    "greater",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^>`)},
-		},
-		{
-			name:    "less_equal",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^<=`)},
-		},
-		{
-			name:    "less",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^<`)},
-		},
-		{
-			name:    "name",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\w*`)},
-		},
-		{
-			name:    "whitespace",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^\s*`)},
-		},
-		{
-			name:    "end_of_statement",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^;`)},
-		},
-		{
-			name:    "invalid",
-			regexps: []*regexp.Regexp{regexp.MustCompile(`^.*`)},
-		},
-	}
-)
-
-type Part struct {
-	Keyword string
-	Body    any
+type Clause struct {
+	Name string
+	Body any
 }
 
 type statement struct {
-	Parts []*Part
-}
-
-type tokenizer struct {
-	query  string
-	cursor int
-}
-
-func (t *tokenizer) getNextToken() (*token, error) {
-	if t.cursor >= len(t.query) {
-		return &tokenNoop, nil
-	}
-
-	s := t.query[t.cursor:]
-	match := ""
-	var tk *token
-
-	firstHalf := t.query[:t.cursor]
-
-	column := strings.LastIndex(firstHalf, "\n") - len(firstHalf)
-	if column > 0 {
-		column = 1
-	} else {
-		column = column * -1
-	}
-
-	line := strings.Count(firstHalf, "\n") + 1
-
-	for _, tr := range regexps {
-		for _, r := range tr.regexps {
-			match = r.FindString(s)
-			if match != "" {
-				tk = &token{
-					_type:    tr.name,
-					strValue: match,
-
-					line:   line,
-					column: column,
-				}
-				break
-			}
-		}
-		if match != "" {
-			break
-		}
-	}
-
-	t.cursor += len(match)
-
-	if tk == nil {
-		return nil, fmt.Errorf("couldn't decipher token %d:%d", line, column)
-	}
-
-	if tk._type == "whitespace" {
-		return t.getNextToken()
-	}
-
-	if tk._type == "string_literal" {
-		tk.strValue = tk.strValue[1 : len(tk.strValue)-1]
-	} else {
-		tk.strValue = strings.ToLower(strings.Join(strings.Fields(tk.strValue), " "))
-	}
-
-	v, err := tk.convertToGoType()
-	if err != nil {
-		return nil, fmt.Errorf("invalid literal '%s' of type '%s' at %d:%d", tk.strValue, tk._type, tk.line, tk.column)
-	}
-
-	tk.goValue = v
-
-	if tk._type == "invalid" {
-		return nil, fmt.Errorf("error parsing '%s' at %d:%d", tk.strValue, line, column)
-	}
-
-	return tk, nil
+	Clauses []*Clause
 }
 
 type parser struct {
@@ -181,9 +19,13 @@ type parser struct {
 	lookahead token
 }
 
-func (p *parser) parse(q string) ([]*statement, error) {
-	p.t = &tokenizer{query: q}
+func newParser(q string) *parser {
+	p := &parser{t: newTokenizer(q)}
 
+	return p
+}
+
+func (p *parser) parse() ([]*statement, error) {
 	err := p.moveToNextToken()
 	if err != nil {
 		return nil, err
@@ -197,7 +39,7 @@ func (p *parser) statements() ([]*statement, error) {
 
 	for {
 		s := &statement{
-			Parts: []*Part{},
+			Clauses: []*Clause{},
 		}
 
 		if p.lookahead == tokenNoop {
@@ -210,16 +52,20 @@ func (p *parser) statements() ([]*statement, error) {
 			}
 
 			if p.lookahead._type == "end_of_statement" {
-				_, _ = p.consume()
+				err := p.moveToNextToken()
+				if err != nil {
+					return nil, err
+				}
+
 				break
 			}
 
-			if p.lookahead._type != "keyword" {
-				return nil, fmt.Errorf("expected keyword, but got '%s' at %d:%d", p.lookahead.strValue, p.lookahead.line, p.lookahead.column)
+			if p.lookahead._type != "clause" {
+				return nil, fmt.Errorf("expected keyword, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 			}
 
-			currentPart := &Part{
-				Keyword: p.lookahead.strValue,
+			currentPart := &Clause{
+				Name: p.lookahead.strValue,
 			}
 
 			body, err := p.partBody()
@@ -229,7 +75,7 @@ func (p *parser) statements() ([]*statement, error) {
 
 			currentPart.Body = body
 
-			s.Parts = append(s.Parts, currentPart)
+			s.Clauses = append(s.Clauses, currentPart)
 		}
 
 		sts = append(sts, s)
@@ -238,56 +84,38 @@ func (p *parser) statements() ([]*statement, error) {
 	return sts, nil
 }
 
-func (p *parser) moveToNextToken() error {
-	tk, err := p.t.getNextToken()
-	if err != nil {
-		return err
-	}
-
-	p.lookahead = *tk
-	return nil
-}
-
-func (p *parser) consume() (token, error) {
-	t := p.lookahead
-
-	err := p.moveToNextToken()
-	if err != nil {
-		return tokenNoop, err
-	}
-
-	return t, nil
-}
-
 func (p *parser) partBody() (any, error) {
 	switch p.lookahead.strValue {
 	case "select":
 		return p.selectBody()
 	case "from":
-		return p.fromBody()
+		return p.name()
 	case "where":
 		return p.whereBody()
 	case "create table":
-		return p.createTable()
+		return p.name()
 	case "definitions":
-		return p.definitions()
+		return p.definitionsBody()
 	case "insert into":
-		return p.insertInto()
+		return p.name()
 	case "values":
-		return p.values()
+		return p.valuesBody()
 	}
 
-	return nil, fmt.Errorf("expected a valid keyword, but got '%s' at %d:%d", p.lookahead.strValue, p.lookahead.line, p.lookahead.column)
+	return nil, fmt.Errorf("expected a valid keyword, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 }
 
 func (p *parser) selectBody() (any, error) {
 	body := make([]*expression, 0)
-	for {
-		err := p.moveToNextToken()
-		if err != nil {
-			return nil, err
-		}
 
+	err := p.moveToNextToken()
+	if err != nil {
+		return nil, err
+	}
+
+	var lastComma token
+
+	for {
 		tempTokens := make([]token, 0)
 		for {
 			if p.lookahead.isPredicateToken() {
@@ -302,9 +130,22 @@ func (p *parser) selectBody() (any, error) {
 			}
 		}
 
+		if len(tempTokens) == 0 && lastComma != tokenNoop {
+			return nil, fmt.Errorf("unexpected comma at %d:%d", lastComma.line, lastComma.column)
+		}
+
+		if len(tempTokens) == 0 {
+			return nil, fmt.Errorf("invalid expression at %d:%d", p.validLine(), p.validColumn())
+		}
+
 		body = append(body, infixToExpressionTree(tempTokens))
 
 		if p.lookahead._type == "comma" {
+			lastComma, err = p.consume()
+			if err != nil {
+				return nil, err
+			}
+
 			continue
 		}
 
@@ -314,25 +155,7 @@ func (p *parser) selectBody() (any, error) {
 	return body, nil
 }
 
-func (p *parser) createTable() (any, error) {
-	err := p.moveToNextToken()
-	if err != nil {
-		return nil, err
-	}
-
-	if p.lookahead._type != "name" {
-		return nil, errors.New("expected name")
-	}
-
-	tk, err := p.consume()
-	if err != nil {
-		return nil, err
-	}
-
-	return tk.strValue, nil
-}
-
-func (p *parser) definitions() (any, error) {
+func (p *parser) definitionsBody() (any, error) {
 	def := []*newColumn{}
 
 	err := p.moveToNextToken()
@@ -341,7 +164,7 @@ func (p *parser) definitions() (any, error) {
 	}
 
 	if !p.lookahead.isLeftParenthesis() {
-		return nil, errors.New("expected opening parenthesis")
+		return nil, fmt.Errorf("expected opening parenthesis, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 	}
 
 	_, err = p.consume()
@@ -363,15 +186,19 @@ func (p *parser) definitions() (any, error) {
 			}
 
 			c.name = tk.strValue
+		} else {
+			return nil, fmt.Errorf("expected column name, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
-		if p.lookahead._type == "name" {
+		if p.lookahead._type == "data_type" {
 			tk, err := p.consume()
 			if err != nil {
 				return nil, err
 			}
 
 			c._type = columnType(tk.strValue)
+		} else {
+			return nil, fmt.Errorf("expected column type, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
 		def = append(def, c)
@@ -386,7 +213,7 @@ func (p *parser) definitions() (any, error) {
 		}
 
 		if p.lookahead._type != "comma" {
-			return nil, fmt.Errorf("expected comma, but got '%s'", p.lookahead.strValue)
+			return nil, fmt.Errorf("expected comma, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
 		_, err := p.consume()
@@ -395,10 +222,14 @@ func (p *parser) definitions() (any, error) {
 		}
 	}
 
+	if len(def) == 0 {
+		return nil, fmt.Errorf("definitions cannot be empty near %d:%d", p.validLine(), p.validColumn())
+	}
+
 	return def, nil
 }
 
-func (p *parser) values() (any, error) {
+func (p *parser) valuesBody() (any, error) {
 	values := []string{}
 
 	err := p.moveToNextToken()
@@ -407,10 +238,10 @@ func (p *parser) values() (any, error) {
 	}
 
 	if !p.lookahead.isLeftParenthesis() {
-		return nil, errors.New("expected opening parenthesis")
+		return nil, fmt.Errorf("expected opening parenthesis, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 	}
 
-	_, err = p.consume()
+	err = p.moveToNextToken()
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +263,7 @@ func (p *parser) values() (any, error) {
 		values = append(values, tk.strValue)
 
 		if p.lookahead.isRightParenthesis() {
-			_, err := p.consume()
+			err := p.moveToNextToken()
 			if err != nil {
 				return nil, err
 			}
@@ -441,54 +272,20 @@ func (p *parser) values() (any, error) {
 		}
 
 		if p.lookahead._type != "comma" {
-			return nil, fmt.Errorf("expected comma, but got '%s'", p.lookahead.strValue)
+			return nil, fmt.Errorf("expected comma, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
-		_, err = p.consume()
+		err = p.moveToNextToken()
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	if len(values) == 0 {
+		return nil, fmt.Errorf("must provide values at %d:%d", p.validLine(), p.validColumn())
+	}
+
 	return values, nil
-}
-
-func (p *parser) fromBody() (any, error) {
-	err := p.moveToNextToken()
-	if err != nil {
-		return nil, err
-	}
-
-	if p.lookahead._type != "name" {
-		return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead.strValue, p.lookahead.line, p.lookahead.column)
-	}
-
-	value := p.lookahead.strValue
-	err = p.moveToNextToken()
-	if err != nil {
-		return nil, err
-	}
-
-	return value, nil
-}
-
-func (p *parser) insertInto() (any, error) {
-	err := p.moveToNextToken()
-	if err != nil {
-		return nil, err
-	}
-
-	if p.lookahead._type != "name" {
-		return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead.strValue, p.lookahead.line, p.lookahead.column)
-	}
-
-	value := p.lookahead.strValue
-	err = p.moveToNextToken()
-	if err != nil {
-		return nil, err
-	}
-
-	return value, nil
 }
 
 func (p *parser) whereBody() (any, error) {
@@ -507,7 +304,7 @@ func (p *parser) whereBody() (any, error) {
 	}
 
 	if len(body) == 0 {
-		return nil, errors.New("expected predicate after WHERE, but got nothing")
+		return nil, errors.New("expected predicate after 'WHERE', but got nothing")
 	}
 
 	if err := checkParenthesesBalance(body); err != nil {
@@ -519,6 +316,24 @@ func (p *parser) whereBody() (any, error) {
 	}
 
 	return infixToExpressionTree(body), nil
+}
+
+func (p *parser) name() (any, error) {
+	err := p.moveToNextToken()
+	if err != nil {
+		return nil, err
+	}
+
+	if p.lookahead._type != "name" {
+		return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead._type, p.validLine(), p.validColumn())
+	}
+
+	tk, err := p.consume()
+	if err != nil {
+		return nil, err
+	}
+
+	return tk.strValue, nil
 }
 
 func infixToExpressionTree(tokens []token) *expression {
@@ -679,7 +494,7 @@ func checkParenthesesSyntax(tokens []token) error {
 
 		if i > 0 {
 			if isPreviousLeftParenthesis && isOperator {
-				return fmt.Errorf("an operator is not allowed to be positioned at %d:%d after a opening parenthesis", t.line, t.column)
+				return fmt.Errorf("an operator is not allowed to be positioned at %d:%d after an opening parenthesis", t.line, t.column)
 			}
 
 			if isPreviousRightParenthesis && isOperand {
@@ -698,7 +513,45 @@ func checkParenthesesSyntax(tokens []token) error {
 	return nil
 }
 
-func (p *parser) mustTokenize() []token {
+func (p *parser) moveToNextToken() error {
+	tk, err := p.t.getNextToken()
+	if err != nil {
+		return err
+	}
+
+	p.lookahead = *tk
+	return nil
+}
+
+func (p *parser) consume() (token, error) {
+	t := p.lookahead
+
+	err := p.moveToNextToken()
+	if err != nil {
+		return tokenNoop, err
+	}
+
+	return t, nil
+}
+
+func (p *parser) validLine() int {
+	if p.lookahead.line > 0 {
+		return p.lookahead.line
+	}
+
+	return p.t.line
+}
+
+func (p *parser) validColumn() int {
+	if p.lookahead.column > 0 {
+		return p.lookahead.column
+	}
+
+	return p.t.column
+}
+
+func mustTokenize(input string) []token {
+	p := parser{t: newTokenizer(input)}
 	tokens := make([]token, 0)
 	for {
 		err := p.moveToNextToken()

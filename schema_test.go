@@ -59,6 +59,7 @@ func TestCreateTableHappyPath(t *testing.T) {
 		expectedTable,
 		cmpopts.IgnoreFields(Table{}, "ID"),
 		cmpopts.IgnoreFields(Column{}, "ID"),
+		cmpopts.IgnoreUnexported(Table{}),
 	); diff != "" {
 		t.Error(diff)
 		return
