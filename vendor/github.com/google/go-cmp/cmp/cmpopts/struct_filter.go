@@ -50,7 +50,7 @@ func newStructFilter(typ interface{}, names ...string) structFilter {
 		if err != nil {
 			panic(fmt.Sprintf("%s: %v", strings.Join(cname, "."), err))
 		}
-		ft.insert(cname)
+		ft.Insert(cname)
 	}
 	return structFilter{t, ft}
 }
@@ -66,7 +66,7 @@ func (sf structFilter) filter(p cmp.Path) bool {
 
 // fieldTree represents a set of dot-separated identifiers.
 //
-// For example, inserting the following selectors:
+// For example, Inserting the following selectors:
 //
 //	Foo
 //	Foo.Bar.Baz
@@ -93,8 +93,8 @@ type fieldTree struct {
 	sub map[string]fieldTree // The sub-tree of fields under this node
 }
 
-// insert inserts a sequence of field accesses into the tree.
-func (ft *fieldTree) insert(cname []string) {
+// Insert Inserts a sequence of field accesses into the tree.
+func (ft *fieldTree) Insert(cname []string) {
 	if ft.sub == nil {
 		ft.sub = make(map[string]fieldTree)
 	}
@@ -103,7 +103,7 @@ func (ft *fieldTree) insert(cname []string) {
 		return
 	}
 	sub := ft.sub[cname[0]]
-	sub.insert(cname[1:])
+	sub.Insert(cname[1:])
 	ft.sub[cname[0]] = sub
 }
 

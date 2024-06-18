@@ -4,7 +4,7 @@
 
 // Package diff implements an algorithm for producing edit-scripts.
 // The edit-script is a sequence of operations needed to transform one list
-// of symbols into another (or vice-versa). The edits allowed are insertions,
+// of symbols into another (or vice-versa). The edits allowed are Insertions,
 // deletions, and modifications. The summation of all edits is called the
 // Levenshtein distance as this problem is well-known in computer science.
 //
@@ -164,8 +164,8 @@ func Difference(nx, ny int, f EqualFunc) (es EditScript) {
 	// The goal of any minimal edit-script algorithm is to find a path from the
 	// top-left corner to the bottom-right corner, while traveling through the
 	// fewest horizontal or vertical edges.
-	// A horizontal edge is equivalent to inserting a symbol from list X.
-	// A vertical edge is equivalent to inserting a symbol from list Y.
+	// A horizontal edge is equivalent to Inserting a symbol from list X.
+	// A vertical edge is equivalent to Inserting a symbol from list Y.
 	// A diagonal edge is equivalent to a matching symbol between both X and Y.
 
 	// Invariants:

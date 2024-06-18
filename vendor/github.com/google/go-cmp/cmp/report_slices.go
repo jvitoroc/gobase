@@ -476,7 +476,7 @@ func coalesceAdjacentEdits(name string, es diff.EditScript) (groups []diffStats)
 
 // coalesceInterveningIdentical coalesces sufficiently short (<= windowSize)
 // equal groups into adjacent unequal groups that currently result in a
-// dual inserted/removed printout. This acts as a high-pass filter to smooth
+// dual Inserted/removed printout. This acts as a high-pass filter to smooth
 // out high-frequency changes within the windowSize.
 //
 // Example:
@@ -573,7 +573,7 @@ func cleanupSurroundingIdentical(groups []diffStats, eq func(i, j int) bool) []d
 		if numIdentical := numLeadingIdentical + numTrailingIdentical; numIdentical > 0 {
 			if numLeadingIdentical > 0 {
 				// Remove leading identical span from this group and
-				// insert it into the preceding group.
+				// Insert it into the preceding group.
 				if i-1 >= 0 {
 					groups[i-1].NumIdentical += numLeadingIdentical
 				} else {
@@ -589,7 +589,7 @@ func cleanupSurroundingIdentical(groups []diffStats, eq func(i, j int) bool) []d
 			}
 			if numTrailingIdentical > 0 {
 				// Remove trailing identical span from this group and
-				// insert it into the succeeding group.
+				// Insert it into the succeeding group.
 				if i+1 < len(groups) {
 					groups[i+1].NumIdentical += numTrailingIdentical
 				} else {

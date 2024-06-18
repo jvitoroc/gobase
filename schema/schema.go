@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"fmt"
@@ -9,17 +9,21 @@ import (
 
 type Schema struct {
 	mu     sync.Mutex
-	Tables []*Table
+	tables []*Table
 
 	rootDir string
 }
 
-type newColumn struct {
-	name  string
-	_type columnType
+func NewSchema(rootDir string) *Schema {
+	return &Schema{rootDir: rootDir}
 }
 
-func (s *Schema) createTable(name string, columns []*newColumn) (*Table, error) {
+type NewColumn struct {
+	Name string
+	Type ColumnType
+}
+
+func (s *Schema) CreateTable(name string, columns []*NewColumn) (*Table, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -31,8 +35,8 @@ func (s *Schema) createTable(name string, columns []*newColumn) (*Table, error) 
 	for i := range columns {
 		c[i] = &Column{
 			ID:   uuid.New().ID(),
-			Name: columns[i].name,
-			Type: columns[i]._type,
+			Name: columns[i].Name,
+			Type: columns[i].Type,
 		}
 	}
 
@@ -44,13 +48,13 @@ func (s *Schema) createTable(name string, columns []*newColumn) (*Table, error) 
 		rootDir: s.rootDir,
 	}
 
-	s.Tables = append(s.Tables, t)
+	s.tables = append(s.tables, t)
 
 	return t, nil
 }
 
-func (s *Schema) getTable(name string) *Table {
-	for _, t := range s.Tables {
+func (s *Schema) GetTable(name string) *Table {
+	for _, t := range s.tables {
 		if t.Name == name {
 			return t
 		}
@@ -60,7 +64,7 @@ func (s *Schema) getTable(name string) *Table {
 }
 
 func (s *Schema) hasTable(name string) bool {
-	for _, t := range s.Tables {
+	for _, t := range s.tables {
 		if t.Name == name {
 			return true
 		}

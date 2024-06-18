@@ -8,10 +8,13 @@ import (
 	"io"
 	"os"
 	"path"
+
+	"github.com/jvitoroc/gobase/schema"
+	"github.com/jvitoroc/gobase/sql"
 )
 
 type database struct {
-	schema *Schema
+	schema *schema.Schema
 }
 
 func (d *database) initialize(rootDir string) error {
@@ -19,7 +22,7 @@ func (d *database) initialize(rootDir string) error {
 	if err != nil {
 		return err
 	}
-	sch := &Schema{rootDir: rootDir}
+	sch := schema.NewSchema(rootDir)
 
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(sch)
@@ -33,8 +36,8 @@ func (d *database) initialize(rootDir string) error {
 }
 
 func (d *database) run(r io.Writer, batch string) error {
-	p := newParser(batch)
-	sts, err := p.parse()
+	p := sql.NewParser(batch)
+	sts, err := p.Parse()
 	if err != nil {
 		return err
 	}
@@ -45,10 +48,10 @@ func (d *database) run(r io.Writer, batch string) error {
 
 	for i, s := range sts {
 		if len(s.Clauses) == 0 {
-			return fmt.Errorf("empty statement #%d", i+1)
+			return fmt.Errorf("empty Statement #%d", i+1)
 		}
 
-		switch s.Clauses[0].Name {
+		switch s.Clauses[0].Type {
 		case "create table":
 			if err := d.createTableStatement(r, s); err != nil {
 				return err
@@ -58,35 +61,35 @@ func (d *database) run(r io.Writer, batch string) error {
 				return err
 			}
 		case "insert into":
-			if err := d.insertIntoStatement(r, s); err != nil {
+			if err := d.InsertIntoStatement(r, s); err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("invalid statement #%d", i+1)
+			return fmt.Errorf("invalid Statement #%d", i+1)
 		}
 	}
 
 	return nil
 }
 
-func (d *database) createTableStatement(r io.Writer, s *statement) error {
+func (d *database) createTableStatement(r io.Writer, s *sql.Statement) error {
 	if err := validateCreateTableStatement(s); err != nil {
 		return err
 	}
 
 	tableName := ""
-	var columns []*newColumn
+	var columns []*schema.NewColumn
 
 	for _, p := range s.Clauses {
-		switch p.Name {
+		switch p.Type {
 		case "create table":
 			tableName = p.Body.(string)
 		case "definitions":
-			columns = p.Body.([]*newColumn)
+			columns = p.Body.([]*schema.NewColumn)
 		}
 	}
 
-	_, err := d.schema.createTable(tableName, columns)
+	_, err := d.schema.CreateTable(tableName, columns)
 	if err != nil {
 		return err
 	}
@@ -94,7 +97,7 @@ func (d *database) createTableStatement(r io.Writer, s *statement) error {
 	return nil
 }
 
-func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
+func (d *database) InsertIntoStatement(r io.Writer, s *sql.Statement) error {
 	if err := validateInsertIntoStatement(s); err != nil {
 		return err
 	}
@@ -103,7 +106,7 @@ func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
 	var values []string
 
 	for _, p := range s.Clauses {
-		switch p.Name {
+		switch p.Type {
 		case "insert into":
 			tableName = p.Body.(string)
 		case "values":
@@ -111,12 +114,12 @@ func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
 		}
 	}
 
-	t := d.schema.getTable(tableName)
+	t := d.schema.GetTable(tableName)
 	if t == nil {
 		return fmt.Errorf("table with name '%s' does not exist", tableName)
 	}
 
-	err := t.insert(values)
+	err := t.Insert(values)
 	if err != nil {
 		return err
 	}
@@ -124,32 +127,32 @@ func (d *database) insertIntoStatement(r io.Writer, s *statement) error {
 	return nil
 }
 
-func (d *database) selectStatement(r io.Writer, s *statement) error {
+func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
 	if err := validateSelectStatement(s); err != nil {
 		return err
 	}
 
 	tableName := ""
 	var returningColumns []string
-	var filter *expression
+	var filter *sql.Expression
 
 	for _, p := range s.Clauses {
-		switch p.Name {
+		switch p.Type {
 		case "select":
 			returningColumns, _ = p.Body.([]string)
 		case "from":
 			tableName, _ = p.Body.(string)
 		case "where":
-			filter, _ = p.Body.(*expression)
+			filter, _ = p.Body.(*sql.Expression)
 		}
 	}
 
-	t := d.schema.getTable(tableName)
+	t := d.schema.GetTable(tableName)
 	if t == nil {
 		return fmt.Errorf("table with name '%s' does not exist", tableName)
 	}
 
-	err := t.read(context.Background(), r, returningColumns, func(row *deserializedRow) (bool, error) {
+	err := t.Read(context.Background(), r, returningColumns, func(row *schema.DeserializedRow) (bool, error) {
 		r, err := evaluateBooleanExpressionAgainstRow(row, filter)
 		if err != nil {
 			return false, err
@@ -187,12 +190,12 @@ func (r *result) genericValueType() string {
 	}
 }
 
-func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression) (*result, error) {
-	if expr._type == Operand {
-		if expr.valueType == "name" {
-			c := row.getColumn(expr.strValue)
+func evaluateBooleanExpressionAgainstRow(row *schema.DeserializedRow, expr *sql.Expression) (*result, error) {
+	if expr.Type == sql.Operand {
+		if expr.ValueType == "name" {
+			c := row.GetColumn(expr.StrValue)
 			if c == nil {
-				return nil, fmt.Errorf("column '%s' does not exist", expr.strValue)
+				return nil, fmt.Errorf("column '%s' does not exist", expr.StrValue)
 			}
 
 			return &result{
@@ -200,15 +203,15 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}, nil
 		} else {
 			return &result{
-				goValue: expr.goValue,
+				goValue: expr.GoValue,
 			}, nil
 		}
 	}
 
-	if expr._type == Operator {
-		switch expr.operator {
-		case "and":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+	if expr.Type == sql.Operator {
+		switch expr.Operator {
+		case sql.And:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
@@ -222,7 +225,7 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 				return &result{goValue: false}, nil
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -233,8 +236,8 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{goValue: l && r}, nil
-		case "or":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.Or:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
@@ -248,7 +251,7 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 				return &result{goValue: true}, nil
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -259,37 +262,37 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{goValue: l || r}, nil
-		case "equal":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.Equal:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
 
 			return &result{goValue: left.goValue == right.goValue}, nil
-		case "not_equal":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.NotEqual:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
 
 			return &result{goValue: left.goValue != right.goValue}, nil
-		case "greater":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.GreaterThan:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -299,13 +302,13 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{goValue: greaterThan(left.goValue, right.goValue)}, nil
-		case "greater_equal":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.GreaterEqualThan:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -315,13 +318,13 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{goValue: greaterOrEqualThan(left.goValue, right.goValue)}, nil
-		case "less":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.LessThan:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -331,13 +334,13 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 			}
 
 			return &result{goValue: greaterThan(right.goValue, left.goValue)}, nil
-		case "less_equal":
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.left)
+		case sql.LessEqualThan:
+			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
 			if err != nil {
 				return nil, err
 			}
 
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.right)
+			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
 			if err != nil {
 				return nil, err
 			}
@@ -350,7 +353,7 @@ func evaluateBooleanExpressionAgainstRow(row *deserializedRow, expr *expression)
 		}
 	}
 
-	return nil, errors.New("unknown expression type")
+	return nil, errors.New("unknown Expression type")
 }
 
 func greaterThan(left, right any) bool {
@@ -367,14 +370,14 @@ func greaterOrEqualThan(left, right any) bool {
 	return l >= r
 }
 
-func validateSelectStatement(s *statement) error {
+func validateSelectStatement(s *sql.Statement) error {
 	hasSelect := false
 	hasFrom := false
 
 	for _, p := range s.Clauses {
-		switch p.Name {
-		case "select":
-			b, ok := p.Body.([]*expression)
+		switch p.Type {
+		case sql.Select:
+			b, ok := p.Body.([]*sql.Expression)
 			if !ok {
 				return errors.New("invalid type for SELECT body")
 			}
@@ -384,7 +387,7 @@ func validateSelectStatement(s *statement) error {
 			}
 
 			hasSelect = true
-		case "from":
+		case sql.From:
 			b, ok := p.Body.(string)
 			if !ok {
 				return errors.New("invalid type for FROM body")
@@ -395,14 +398,14 @@ func validateSelectStatement(s *statement) error {
 			}
 
 			hasFrom = true
-		case "where":
-			b, ok := p.Body.(*expression)
+		case sql.Where:
+			b, ok := p.Body.(*sql.Expression)
 			if !ok {
 				return errors.New("invalid type for WHERE body")
 			}
 
 			if b == nil {
-				return errors.New("must provide a filter expression after keyword WHERE")
+				return errors.New("must provide a filter Expression after keyword WHERE")
 			}
 		}
 	}
@@ -418,13 +421,13 @@ func validateSelectStatement(s *statement) error {
 	return nil
 }
 
-func validateCreateTableStatement(s *statement) error {
+func validateCreateTableStatement(s *sql.Statement) error {
 	hasCreateTable := false
 	hasDefinitions := false
 
 	for _, p := range s.Clauses {
-		switch p.Name {
-		case "create table":
+		switch p.Type {
+		case sql.CreateTable:
 			b, ok := p.Body.(string)
 			if !ok {
 				return errors.New("invalid name for table")
@@ -435,8 +438,8 @@ func validateCreateTableStatement(s *statement) error {
 			}
 
 			hasCreateTable = true
-		case "definitions":
-			b, ok := p.Body.([]*newColumn)
+		case sql.Definitions:
+			b, ok := p.Body.([]*schema.NewColumn)
 			if !ok {
 				return errors.New("invalid definitions")
 			}
@@ -460,13 +463,13 @@ func validateCreateTableStatement(s *statement) error {
 	return nil
 }
 
-func validateInsertIntoStatement(s *statement) error {
+func validateInsertIntoStatement(s *sql.Statement) error {
 	hasInsertInto := false
 	hasValues := false
 
 	for _, p := range s.Clauses {
-		switch p.Name {
-		case "insert into":
+		switch p.Type {
+		case sql.InsertInto:
 			b, ok := p.Body.(string)
 			if !ok {
 				return errors.New("invalid table name")
@@ -477,14 +480,14 @@ func validateInsertIntoStatement(s *statement) error {
 			}
 
 			hasInsertInto = true
-		case "values":
+		case sql.Values:
 			b, ok := p.Body.([]string)
 			if !ok {
 				return errors.New("invalid values")
 			}
 
 			if len(b) == 0 {
-				return errors.New("must provide values to be insert into table")
+				return errors.New("must provide values to be Insert into table")
 			}
 
 			hasValues = true

@@ -320,7 +320,7 @@ func (opts formatOptions) formatString(prefix, s string) textNode {
 	}
 
 	// For multiline strings, use the triple-quote syntax,
-	// but only use it when printing removed or inserted nodes since
+	// but only use it when printing removed or Inserted nodes since
 	// we only want the extra verbosity for those cases.
 	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 	isTripleQuoted := len(lines) >= 4 && (opts.DiffMode == '-' || opts.DiffMode == '+')

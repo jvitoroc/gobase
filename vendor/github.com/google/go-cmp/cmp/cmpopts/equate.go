@@ -42,7 +42,7 @@ func isEmpty(x, y interface{}) bool {
 // To express only a fraction or only a margin, use 0 for the other parameter.
 // The fraction and margin must be non-negative.
 //
-// The mathematical expression used is equivalent to:
+// The mathematical Expression used is equivalent to:
 //
 //	|x-y| ≤ max(fraction*min(|x|, |y|), margin)
 //

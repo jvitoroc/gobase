@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"testing"
@@ -34,12 +34,12 @@ func TestCreateTableHappyPath(t *testing.T) {
 		},
 	}
 
-	table, err := s.createTable(
+	table, err := s.CreateTable(
 		"test",
-		[]*newColumn{
-			{name: "column1", _type: BoolType},
-			{name: "column2", _type: Int32Type},
-			{name: "column3", _type: StringType},
+		[]*NewColumn{
+			{Name: "column1", Type: BoolType},
+			{Name: "column2", Type: Int32Type},
+			{Name: "column3", Type: StringType},
 		},
 	)
 	if err != nil {
@@ -53,7 +53,7 @@ func TestCreateTableHappyPath(t *testing.T) {
 		return
 	}
 
-	t1 := s.getTable(table.Name)
+	t1 := s.GetTable(table.Name)
 	if diff := cmp.Diff(
 		t1,
 		expectedTable,

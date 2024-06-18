@@ -224,7 +224,7 @@ func (s textList) formatCompactTo(b []byte, d diffMode) ([]byte, textNode) {
 			b = append(b, ", "...)
 		}
 	}
-	// Force multi-lined output when printing a removed/inserted node that
+	// Force multi-lined output when printing a removed/Inserted node that
 	// is sufficiently long.
 	if (d == diffInserted || d == diffRemoved) && len(b[n0:]) > maxColumnLength {
 		multiLine = true

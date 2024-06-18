@@ -252,7 +252,7 @@ func (si SliceIndex) Key() int {
 
 // SplitKeys are the indexes for indexing into slices in the
 // x and y values, respectively. These indexes may differ due to the
-// insertion or removal of an element in one of the slices, causing
+// Insertion or removal of an element in one of the slices, causing
 // all of the indexes to be shifted. If an index is -1, then that
 // indicates that the element does not exist in the associated slice.
 //

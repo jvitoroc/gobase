@@ -1,4 +1,4 @@
-package main
+package schema
 
 import (
 	"bytes"
@@ -13,15 +13,15 @@ import (
 	"strconv"
 )
 
-type columnType string
+type ColumnType string
 
 const (
-	StringType columnType = "string"
-	BoolType   columnType = "bool"
-	Int32Type  columnType = "int"
+	StringType ColumnType = "string"
+	BoolType   ColumnType = "bool"
+	Int32Type  ColumnType = "int"
 )
 
-func checkValueType(_type columnType, value string) bool {
+func checkValueType(_type ColumnType, value string) bool {
 	switch _type {
 	case BoolType:
 		_, err := strconv.ParseBool(value)
@@ -39,10 +39,10 @@ func checkValueType(_type columnType, value string) bool {
 type Column struct {
 	ID   uint32
 	Name string
-	Type columnType
+	Type ColumnType
 }
 
-func blobToGoType(_type columnType, value []byte) (any, error) {
+func blobToGoType(_type ColumnType, value []byte) (any, error) {
 	switch _type {
 	case BoolType:
 		if value[0] == 01 {
@@ -64,7 +64,7 @@ func blobToGoType(_type columnType, value []byte) (any, error) {
 	return nil, errors.New("unsupported type")
 }
 
-func stringToBlob(_type columnType, value string) ([]byte, error) {
+func stringToBlob(_type ColumnType, value string) ([]byte, error) {
 	switch _type {
 	case BoolType:
 		v, _ := strconv.ParseBool(value)
@@ -103,7 +103,7 @@ func (t *Table) fileName() string {
 	return path.Join(t.rootDir, strconv.FormatUint(uint64(t.ID), 10))
 }
 
-func (t *Table) insert(values []string) error {
+func (t *Table) Insert(values []string) error {
 	if len(t.Columns) != len(values) {
 		return fmt.Errorf("table has %d columns, but %d values were given", len(t.Columns), len(values))
 	}
@@ -117,11 +117,11 @@ func (t *Table) insert(values []string) error {
 	return t.write(values)
 }
 
-type deserializedRow struct {
-	Columns []*deserializedColumn
+type DeserializedRow struct {
+	Columns []*DeserializedColumn
 }
 
-func (d *deserializedRow) getColumn(name string) *deserializedColumn {
+func (d *DeserializedRow) GetColumn(name string) *DeserializedColumn {
 	for _, c := range d.Columns {
 		if c.Name == name {
 			return c
@@ -131,7 +131,7 @@ func (d *deserializedRow) getColumn(name string) *deserializedColumn {
 	return nil
 }
 
-func (t *Table) read(ctx context.Context, wr io.Writer, columns []string, filter func(*deserializedRow) (bool, error)) error {
+func (t *Table) Read(ctx context.Context, wr io.Writer, columns []string, filter func(*DeserializedRow) (bool, error)) error {
 	ch := t.createReader(ctx)
 
 	for row := range ch {
@@ -171,21 +171,21 @@ func (t *Table) read(ctx context.Context, wr io.Writer, columns []string, filter
 	return nil
 }
 
-type deserializedColumn struct {
+type DeserializedColumn struct {
 	*Column
 	Value any
 }
 
-func (t *Table) deserializeColumns(row map[uint32][]byte) (*deserializedRow, error) {
-	r := &deserializedRow{
-		Columns: make([]*deserializedColumn, 0, len(t.Columns)),
+func (t *Table) deserializeColumns(row map[uint32][]byte) (*DeserializedRow, error) {
+	r := &DeserializedRow{
+		Columns: make([]*DeserializedColumn, 0, len(t.Columns)),
 	}
 	for _, c := range t.Columns {
 		v, err := blobToGoType(c.Type, row[c.ID])
 		if err != nil {
 			return nil, err
 		}
-		r.Columns = append(r.Columns, &deserializedColumn{
+		r.Columns = append(r.Columns, &DeserializedColumn{
 			Column: c,
 			Value:  v,
 		})

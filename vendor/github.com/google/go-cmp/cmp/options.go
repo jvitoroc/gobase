@@ -397,7 +397,7 @@ func (cm comparer) String() string {
 // For example, the [reflect.Type] documentation defines equality to be determined
 // by the == operator on the interface (essentially performing a shallow pointer
 // comparison) and most attempts to compare *[regexp.Regexp] types are interested
-// in only checking that the regular expression strings are equal.
+// in only checking that the regular Expression strings are equal.
 // Both of these are accomplished using [Comparer] options:
 //
 //	Comparer(func(x, y reflect.Type) bool { return x == y })
@@ -492,7 +492,7 @@ func Reporter(r interface {
 	// Equal always calls PushStep at the start to provide an operation-less
 	// PathStep used to report the root values.
 	//
-	// Within a slice, the exact set of inserted, removed, or modified elements
+	// Within a slice, the exact set of Inserted, removed, or modified elements
 	// is unspecified and may change in future implementations.
 	// The entries of a map are iterated through in an unspecified order.
 	PushStep(PathStep)

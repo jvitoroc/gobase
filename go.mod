@@ -1,4 +1,4 @@
-module gobase
+module github.com/jvitoroc/gobase
 
 go 1.21.8
 

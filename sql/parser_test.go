@@ -1,122 +1,124 @@
-package main
+package sql
 
 import (
 	"testing"
+
+	"github.com/jvitoroc/gobase/schema"
 
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestRidiculousSelect(t *testing.T) {
-	p := newParser(`SELeCT foo    , bar    FROM       jobs  where (foo == 
+	p := NewParser(`SELeCT foo    , bar    FROM       jobs  where (foo == 
 		 "  bbbbasdasd asd asd ") or (bar >= 1.0);`)
-	q, err := p.parse()
+	q, err := p.Parse()
 	if err != nil {
 		t.Error(err)
 	}
 
-	diff := cmp.Diff(q, []*statement{
+	diff := cmp.Diff(q, []*Statement{
 		{
 			Clauses: []*Clause{
 				{
-					Name: "select",
-					Body: []*expression{
-						{_type: "operand", valueType: "name", strValue: "foo"},
-						{_type: "operand", valueType: "name", strValue: "bar"},
+					Type: "select",
+					Body: []*Expression{
+						{Type: "operand", ValueType: "name", StrValue: "foo"},
+						{Type: "operand", ValueType: "name", StrValue: "bar"},
 					},
 				},
 				{
-					Name: "from",
+					Type: "from",
 					Body: "jobs",
 				},
 				{
-					Name: "where",
-					Body: &expression{
-						_type:    "operator",
-						operator: "or",
-						left: &expression{
-							_type:    "operator",
-							operator: "equal",
-							left:     &expression{_type: "operand", valueType: "name", strValue: "foo"},
-							right: &expression{
-								_type:     "operand",
-								valueType: "string_literal",
-								strValue:  "  bbbbasdasd asd asd ",
-								goValue:   string("  bbbbasdasd asd asd "),
+					Type: "where",
+					Body: &Expression{
+						Type:     "operator",
+						Operator: "or",
+						Left: &Expression{
+							Type:     "operator",
+							Operator: "equal",
+							Left:     &Expression{Type: "operand", ValueType: "name", StrValue: "foo"},
+							Right: &Expression{
+								Type:      "operand",
+								ValueType: "string_literal",
+								StrValue:  "  bbbbasdasd asd asd ",
+								GoValue:   string("  bbbbasdasd asd asd "),
 							},
 						},
-						right: &expression{
-							_type:    "operator",
-							operator: "greater_equal",
-							left:     &expression{_type: "operand", valueType: "name", strValue: "bar"},
-							right: &expression{
-								_type:     "operand",
-								valueType: "number_literal",
-								strValue:  "1.0",
-								goValue:   float64(1),
+						Right: &Expression{
+							Type:     "operator",
+							Operator: "greater_equal",
+							Left:     &Expression{Type: "operand", ValueType: "name", StrValue: "bar"},
+							Right: &Expression{
+								Type:      "operand",
+								ValueType: "number_literal",
+								StrValue:  "1.0",
+								GoValue:   float64(1),
 							},
 						},
 					},
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, expression{}))
+	}, cmp.AllowUnexported(token{}, Expression{}))
 	if diff != "" {
 		t.Error(diff)
 	}
 }
 
 func TestCreateTable(t *testing.T) {
-	s, err := newParser(`
+	s, err := NewParser(`
 		CREATE TABLE foo DEFINITIONS (
 			foo bool,
 			bar int,
 			baz string
 		);
-	`).parse()
+	`).Parse()
 	if err != nil {
 		t.Error(err)
 	}
 
-	diff := cmp.Diff(s, []*statement{
+	diff := cmp.Diff(s, []*Statement{
 		{
 			Clauses: []*Clause{
 				{
-					Name: "create table",
+					Type: "create table",
 					Body: "foo",
 				},
 				{
-					Name: "definitions",
-					Body: []*newColumn{
-						{name: "foo", _type: BoolType},
-						{name: "bar", _type: Int32Type},
-						{name: "baz", _type: StringType},
+					Type: "definitions",
+					Body: []*schema.NewColumn{
+						{Name: "foo", Type: schema.BoolType},
+						{Name: "bar", Type: schema.Int32Type},
+						{Name: "baz", Type: schema.StringType},
 					},
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, expression{}, newColumn{}))
+	}, cmp.AllowUnexported(token{}, Expression{}, schema.NewColumn{}))
 	if diff != "" {
 		t.Error(diff)
 	}
 }
 
 func TestInsertInto(t *testing.T) {
-	s, err := newParser(`
+	s, err := NewParser(`
 		INSERT INTO foo VALUES (true, 123, "foobarbaz");
-	`).parse()
+	`).Parse()
 	if err != nil {
 		t.Error(err)
 	}
 
-	diff := cmp.Diff(s, []*statement{
+	diff := cmp.Diff(s, []*Statement{
 		{
 			Clauses: []*Clause{
 				{
-					Name: "insert into",
+					Type: "insert into",
 					Body: "foo",
 				},
 				{
-					Name: "values",
+					Type: "values",
 					Body: []string{
 						"true",
 						"123",
@@ -125,14 +127,14 @@ func TestInsertInto(t *testing.T) {
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, expression{}))
+	}, cmp.AllowUnexported(token{}, Expression{}))
 	if diff != "" {
 		t.Error(diff)
 	}
 }
 
 func TestMultipleStatements(t *testing.T) {
-	s, err := newParser(`
+	s, err := NewParser(`
 		CREATE TABLE foo DEFINITIONS (
 			foo bool,
 			bar int,
@@ -142,24 +144,24 @@ func TestMultipleStatements(t *testing.T) {
 		INSERT INTO foo VALUES (true, 123, "foobarbaz");
 
 		SELECT foo, bar, baz FROM foo WHERE foo != false AND bar > 100;
-	`).parse()
+	`).Parse()
 	if err != nil {
 		t.Error(err)
 	}
 
-	diff := cmp.Diff(s, []*statement{
+	diff := cmp.Diff(s, []*Statement{
 		{
 			Clauses: []*Clause{
 				{
-					Name: "create table",
+					Type: "create table",
 					Body: "foo",
 				},
 				{
-					Name: "definitions",
-					Body: []*newColumn{
-						{name: "foo", _type: BoolType},
-						{name: "bar", _type: Int32Type},
-						{name: "baz", _type: StringType},
+					Type: "definitions",
+					Body: []*schema.NewColumn{
+						{Name: "foo", Type: schema.BoolType},
+						{Name: "bar", Type: schema.Int32Type},
+						{Name: "baz", Type: schema.StringType},
 					},
 				},
 			},
@@ -167,11 +169,11 @@ func TestMultipleStatements(t *testing.T) {
 		{
 			Clauses: []*Clause{
 				{
-					Name: "insert into",
+					Type: "insert into",
 					Body: "foo",
 				},
 				{
-					Name: "values",
+					Type: "values",
 					Body: []string{
 						"true",
 						"123",
@@ -183,57 +185,57 @@ func TestMultipleStatements(t *testing.T) {
 		{
 			Clauses: []*Clause{
 				{
-					Name: "select",
-					Body: []*expression{
-						{_type: Operand, valueType: "name", strValue: "foo"},
-						{_type: Operand, valueType: "name", strValue: "bar"},
-						{_type: Operand, valueType: "name", strValue: "baz"},
+					Type: "select",
+					Body: []*Expression{
+						{Type: Operand, ValueType: "name", StrValue: "foo"},
+						{Type: Operand, ValueType: "name", StrValue: "bar"},
+						{Type: Operand, ValueType: "name", StrValue: "baz"},
 					},
 				},
 				{
-					Name: "from",
+					Type: "from",
 					Body: "foo",
 				},
 				{
-					Name: "where",
-					Body: &expression{
-						_type:    Operator,
-						operator: "and",
-						left: &expression{
-							_type:    Operator,
-							operator: "not_equal",
-							left: &expression{
-								_type:     Operand,
-								valueType: "name",
-								strValue:  "foo",
+					Type: "where",
+					Body: &Expression{
+						Type:     Operator,
+						Operator: "and",
+						Left: &Expression{
+							Type:     Operator,
+							Operator: "not_equal",
+							Left: &Expression{
+								Type:      Operand,
+								ValueType: "name",
+								StrValue:  "foo",
 							},
-							right: &expression{
-								_type:     Operand,
-								valueType: "boolean_literal",
-								strValue:  "false",
-								goValue:   false,
+							Right: &Expression{
+								Type:      Operand,
+								ValueType: "boolean_literal",
+								StrValue:  "false",
+								GoValue:   false,
 							},
 						},
-						right: &expression{
-							_type:    Operator,
-							operator: "greater",
-							left: &expression{
-								_type:     Operand,
-								valueType: "name",
-								strValue:  "bar",
+						Right: &Expression{
+							Type:     Operator,
+							Operator: "greater",
+							Left: &Expression{
+								Type:      Operand,
+								ValueType: "name",
+								StrValue:  "bar",
 							},
-							right: &expression{
-								_type:     Operand,
-								valueType: "number_literal",
-								strValue:  "100",
-								goValue:   float64(100),
+							Right: &Expression{
+								Type:      Operand,
+								ValueType: "number_literal",
+								StrValue:  "100",
+								GoValue:   float64(100),
 							},
 						},
 					},
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, expression{}, newColumn{}))
+	}, cmp.AllowUnexported(token{}, Expression{}, schema.NewColumn{}))
 	if diff != "" {
 		t.Error(diff)
 	}
@@ -253,21 +255,21 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			args: args{
 				input: "",
 			},
-			wantErr: "empty expression",
+			wantErr: "empty Expression",
 		},
 		{
 			name: "invalid token",
 			args: args{
 				input: "(select",
 			},
-			wantErr: "'select' at 1:2 is not valid as part of an expression",
+			wantErr: "'select' at 1:2 is not valid as part of an Expression",
 		},
 		{
-			name: "invalid beginning of expression",
+			name: "invalid beginning of Expression",
 			args: args{
 				input: "and select",
 			},
-			wantErr: "can't start expression with operator 'and' at 1:1",
+			wantErr: "can't start Expression with operator 'and' at 1:1",
 		},
 		{
 			name: "invalid token after operand",
@@ -298,11 +300,11 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			wantErr: "an operator is not allowed to be positioned at 1:2 after an opening parenthesis",
 		},
 		{
-			name: "ending expression with operator",
+			name: "ending Expression with operator",
 			args: args{
 				input: ") and",
 			},
-			wantErr: "can't end expression with an operator 'and' at 1:3",
+			wantErr: "can't end Expression with an operator 'and' at 1:3",
 		},
 		{
 			name: "happy path",
@@ -352,10 +354,15 @@ func Test_checkParenthesesBalance(t *testing.T) {
 
 func Test_infixToPostfix(t *testing.T) {
 	type test struct {
-		input    []token
-		expected []token
+		input       []token
+		expected    []token
+		expectedErr string
 	}
 	tests := []test{
+		{
+			input:       nil,
+			expectedErr: "no tokens given",
+		},
 		{
 			input: []token{
 				{_type: "number_literal", strValue: "1"},
@@ -529,7 +536,19 @@ func Test_infixToPostfix(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		got := infixToPostfix(tt.input)
+		got, err := infixToPostfix(tt.input)
+		gotErr := ""
+		if err != nil {
+			gotErr = err.Error()
+		}
+
+		if gotErr != "" {
+			if tt.expectedErr != gotErr {
+				t.Errorf("test %d failed: expected err '%s', but got '%s'", i+1, tt.expectedErr, err.Error())
+			}
+			continue
+		}
+
 		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
@@ -538,153 +557,162 @@ func Test_infixToPostfix(t *testing.T) {
 
 func Test_infixToExpressionTree(t *testing.T) {
 	type test struct {
-		input    string
-		expected *expression
+		input       string
+		expected    *Expression
+		expectedErr string
 	}
 	tests := []test{
 		{
+			input:       "",
+			expectedErr: "no tokens given",
+		},
+		{
+			input:       "1 select 1",
+			expectedErr: "token 'select' at 1:3 is invalid as part of an expression",
+		},
+		{
 			input: "1 > 2",
-			expected: &expression{
-				_type:    Operator,
-				operator: "greater",
-				left: &expression{
-					_type:     Operand,
-					valueType: "number_literal",
-					goValue:   float64(1),
-					strValue:  "1",
+			expected: &Expression{
+				Type:     Operator,
+				Operator: "greater",
+				Left: &Expression{
+					Type:      Operand,
+					ValueType: "number_literal",
+					GoValue:   float64(1),
+					StrValue:  "1",
 				},
-				right: &expression{
-					_type:     Operand,
-					valueType: "number_literal",
-					goValue:   float64(2),
-					strValue:  "2",
+				Right: &Expression{
+					Type:      Operand,
+					ValueType: "number_literal",
+					GoValue:   float64(2),
+					StrValue:  "2",
 				},
 			},
 		},
 		{
 			input: "a == b",
-			expected: &expression{
-				_type:    Operator,
-				operator: "equal",
-				left: &expression{
-					_type:     Operand,
-					valueType: "name",
-					strValue:  "a",
+			expected: &Expression{
+				Type:     Operator,
+				Operator: "equal",
+				Left: &Expression{
+					Type:      Operand,
+					ValueType: "name",
+					StrValue:  "a",
 				},
-				right: &expression{
-					_type:     Operand,
-					valueType: "name",
-					strValue:  "b",
+				Right: &Expression{
+					Type:      Operand,
+					ValueType: "name",
+					StrValue:  "b",
 				},
 			},
 		},
 		{
 			input: "(x > 0) and (y <= 10)",
-			expected: &expression{
-				_type:    Operator,
-				operator: "and",
-				left: &expression{
-					_type:    Operator,
-					operator: "greater",
-					left: &expression{
-						_type:     Operand,
-						valueType: "name",
-						strValue:  "x",
+			expected: &Expression{
+				Type:     Operator,
+				Operator: "and",
+				Left: &Expression{
+					Type:     Operator,
+					Operator: "greater",
+					Left: &Expression{
+						Type:      Operand,
+						ValueType: "name",
+						StrValue:  "x",
 					},
-					right: &expression{
-						_type:     Operand,
-						valueType: "number_literal",
-						goValue:   float64(0),
-						strValue:  "0",
+					Right: &Expression{
+						Type:      Operand,
+						ValueType: "number_literal",
+						GoValue:   float64(0),
+						StrValue:  "0",
 					},
 				},
-				right: &expression{
-					_type:    Operator,
-					operator: "less_equal",
-					left: &expression{
-						_type:     Operand,
-						valueType: "name",
-						strValue:  "y",
+				Right: &Expression{
+					Type:     Operator,
+					Operator: "less_equal",
+					Left: &Expression{
+						Type:      Operand,
+						ValueType: "name",
+						StrValue:  "y",
 					},
-					right: &expression{
-						_type:     Operand,
-						valueType: "number_literal",
-						goValue:   float64(10),
-						strValue:  "10",
+					Right: &Expression{
+						Type:      Operand,
+						ValueType: "number_literal",
+						GoValue:   float64(10),
+						StrValue:  "10",
 					},
 				},
 			},
 		},
 		{
 			input: "(a > 0 and b <= 10) or (c == \"hello\" and d != 5)",
-			expected: &expression{
-				_type:    Operator,
-				operator: "or",
-				left: &expression{
-					_type:    Operator,
-					operator: "and",
-					left: &expression{
-						_type:    Operator,
-						operator: "greater",
-						left: &expression{
-							_type:     Operand,
-							valueType: "name",
-							strValue:  "a",
+			expected: &Expression{
+				Type:     Operator,
+				Operator: "or",
+				Left: &Expression{
+					Type:     Operator,
+					Operator: "and",
+					Left: &Expression{
+						Type:     Operator,
+						Operator: "greater",
+						Left: &Expression{
+							Type:      Operand,
+							ValueType: "name",
+							StrValue:  "a",
 						},
-						right: &expression{
-							_type:     Operand,
-							valueType: "number_literal",
-							goValue:   float64(0),
-							strValue:  "0",
+						Right: &Expression{
+							Type:      Operand,
+							ValueType: "number_literal",
+							GoValue:   float64(0),
+							StrValue:  "0",
 						},
 					},
-					right: &expression{
-						_type:    Operator,
-						operator: "less_equal",
-						left: &expression{
-							_type:     Operand,
-							valueType: "name",
-							strValue:  "b",
+					Right: &Expression{
+						Type:     Operator,
+						Operator: "less_equal",
+						Left: &Expression{
+							Type:      Operand,
+							ValueType: "name",
+							StrValue:  "b",
 						},
-						right: &expression{
-							_type:     Operand,
-							valueType: "number_literal",
-							goValue:   float64(10),
-							strValue:  "10",
+						Right: &Expression{
+							Type:      Operand,
+							ValueType: "number_literal",
+							GoValue:   float64(10),
+							StrValue:  "10",
 						},
 					},
 				},
-				right: &expression{
-					_type:    Operator,
-					operator: "and",
-					left: &expression{
-						_type:    Operator,
-						operator: "equal",
-						left: &expression{
-							_type:     Operand,
-							valueType: "name",
-							strValue:  "c",
+				Right: &Expression{
+					Type:     Operator,
+					Operator: "and",
+					Left: &Expression{
+						Type:     Operator,
+						Operator: "equal",
+						Left: &Expression{
+							Type:      Operand,
+							ValueType: "name",
+							StrValue:  "c",
 						},
-						right: &expression{
-							_type:     Operand,
-							valueType: "string_literal",
-							strValue:  "hello",
-							goValue:   "hello",
+						Right: &Expression{
+							Type:      Operand,
+							ValueType: "string_literal",
+							StrValue:  "hello",
+							GoValue:   "hello",
 						},
 					},
-					right: &expression{
-						_type:    Operator,
-						operator: "not_equal",
-						left: &expression{
-							_type:     Operand,
-							valueType: "name",
-							strValue:  "d",
+					Right: &Expression{
+						Type:     Operator,
+						Operator: "not_equal",
+						Left: &Expression{
+							Type:      Operand,
+							ValueType: "name",
+							StrValue:  "d",
 						},
-						right: &expression{
-							_type:     Operand,
-							valueType: "number_literal",
-							goValue:   float64(5),
-							strValue:  "5",
+						Right: &Expression{
+							Type:      Operand,
+							ValueType: "number_literal",
+							GoValue:   float64(5),
+							StrValue:  "5",
 						},
 					},
 				},
@@ -694,8 +722,21 @@ func Test_infixToExpressionTree(t *testing.T) {
 
 	for i, tt := range tests {
 		input := mustTokenize(tt.input)
-		got := infixToExpressionTree(input)
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(expression{})); diff != "" {
+
+		got, err := infixToExpressionTree(input)
+		gotErr := ""
+		if err != nil {
+			gotErr = err.Error()
+		}
+
+		if gotErr != "" {
+			if tt.expectedErr != gotErr {
+				t.Errorf("test %d failed: expected err '%s', but got '%s'", i+1, tt.expectedErr, err.Error())
+			}
+			continue
+		}
+
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -872,88 +913,88 @@ func Test_parser_consume(t *testing.T) {
 func Test_parser_selectBody(t *testing.T) {
 	type test struct {
 		input       string
-		expected    []*expression
+		expected    []*Expression
 		expectedErr string
 	}
 	tests := []test{
 		{
 			input: "foo, bar, 1 == 1, 2 <= 2, (1 != 2) and (true == false)",
-			expected: []*expression{
+			expected: []*Expression{
 				{
-					_type:     "operand",
-					valueType: "name",
-					strValue:  "foo",
+					Type:      "operand",
+					ValueType: "name",
+					StrValue:  "foo",
 				},
 				{
-					_type:     "operand",
-					valueType: "name",
-					strValue:  "bar",
+					Type:      "operand",
+					ValueType: "name",
+					StrValue:  "bar",
 				},
 				{
-					_type:    "operator",
-					operator: "equal",
-					left: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "1",
-						goValue:   float64(1),
+					Type:     "operator",
+					Operator: "equal",
+					Left: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "1",
+						GoValue:   float64(1),
 					},
-					right: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "1",
-						goValue:   float64(1),
-					},
-				},
-				{
-					_type:    "operator",
-					operator: "less_equal",
-					left: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "2",
-						goValue:   float64(2),
-					},
-					right: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "2",
-						goValue:   float64(2),
+					Right: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "1",
+						GoValue:   float64(1),
 					},
 				},
 				{
-					_type:    "operator",
-					operator: "and",
-					left: &expression{
-						_type:    "operator",
-						operator: "not_equal",
-						left: &expression{
-							_type:     "operand",
-							valueType: "number_literal",
-							strValue:  "1",
-							goValue:   float64(1),
+					Type:     "operator",
+					Operator: "less_equal",
+					Left: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "2",
+						GoValue:   float64(2),
+					},
+					Right: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "2",
+						GoValue:   float64(2),
+					},
+				},
+				{
+					Type:     "operator",
+					Operator: "and",
+					Left: &Expression{
+						Type:     "operator",
+						Operator: "not_equal",
+						Left: &Expression{
+							Type:      "operand",
+							ValueType: "number_literal",
+							StrValue:  "1",
+							GoValue:   float64(1),
 						},
-						right: &expression{
-							_type:     "operand",
-							valueType: "number_literal",
-							strValue:  "2",
-							goValue:   float64(2),
+						Right: &Expression{
+							Type:      "operand",
+							ValueType: "number_literal",
+							StrValue:  "2",
+							GoValue:   float64(2),
 						},
 					},
-					right: &expression{
-						_type:    "operator",
-						operator: "equal",
-						left: &expression{
-							_type:     "operand",
-							valueType: "boolean_literal",
-							strValue:  "true",
-							goValue:   true,
+					Right: &Expression{
+						Type:     "operator",
+						Operator: "equal",
+						Left: &Expression{
+							Type:      "operand",
+							ValueType: "boolean_literal",
+							StrValue:  "true",
+							GoValue:   true,
 						},
-						right: &expression{
-							_type:     "operand",
-							valueType: "boolean_literal",
-							strValue:  "false",
-							goValue:   false,
+						Right: &Expression{
+							Type:      "operand",
+							ValueType: "boolean_literal",
+							StrValue:  "false",
+							GoValue:   false,
 						},
 					},
 				},
@@ -961,31 +1002,31 @@ func Test_parser_selectBody(t *testing.T) {
 		},
 		{
 			input: "foo",
-			expected: []*expression{
+			expected: []*Expression{
 				{
-					_type:     "operand",
-					valueType: "name",
-					strValue:  "foo",
+					Type:      "operand",
+					ValueType: "name",
+					StrValue:  "foo",
 				},
 			},
 		},
 		{
 			input: "1 == 1",
-			expected: []*expression{
+			expected: []*Expression{
 				{
-					_type:    "operator",
-					operator: "equal",
-					left: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "1",
-						goValue:   float64(1),
+					Type:     "operator",
+					Operator: "equal",
+					Left: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "1",
+						GoValue:   float64(1),
 					},
-					right: &expression{
-						_type:     "operand",
-						valueType: "number_literal",
-						strValue:  "1",
-						goValue:   float64(1),
+					Right: &Expression{
+						Type:      "operand",
+						ValueType: "number_literal",
+						StrValue:  "1",
+						GoValue:   float64(1),
 					},
 				},
 			},
@@ -996,20 +1037,26 @@ func Test_parser_selectBody(t *testing.T) {
 		},
 		{
 			input:       "",
-			expectedErr: "invalid expression at 1:1",
+			expectedErr: "invalid Expression at 1:1",
 		},
 		{
 			input:       "select",
-			expectedErr: "invalid expression at 1:1",
+			expectedErr: "invalid Expression at 1:1",
 		},
 		{
 			input:       " , , ",
-			expectedErr: "invalid expression at 1:2",
+			expectedErr: "invalid Expression at 1:2",
 		},
 	}
 
 	for i, tt := range tests {
-		p := newParser(tt.input)
+		p := NewParser(tt.input)
+
+		err := p.moveToNextToken()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
 		got, err := p.selectBody()
 		gotErr := ""
@@ -1017,14 +1064,14 @@ func Test_parser_selectBody(t *testing.T) {
 			gotErr = err.Error()
 		}
 
-		if tt.expectedErr != "" {
+		if gotErr != "" {
 			if tt.expectedErr != gotErr {
 				t.Errorf("test %d failed: expected err '%s', but got '%s'", i+1, tt.expectedErr, err.Error())
 			}
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{}, expression{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{}, Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -1033,16 +1080,16 @@ func Test_parser_selectBody(t *testing.T) {
 func Test_parser_definitionsBody(t *testing.T) {
 	type test struct {
 		input       string
-		expected    []*newColumn
+		expected    []*schema.NewColumn
 		expectedErr string
 	}
 	tests := []test{
 		{
 			input: "(foo int, bar string, baz bool)",
-			expected: []*newColumn{
-				{name: "foo", _type: Int32Type},
-				{name: "bar", _type: StringType},
-				{name: "baz", _type: BoolType},
+			expected: []*schema.NewColumn{
+				{Name: "foo", Type: schema.Int32Type},
+				{Name: "bar", Type: schema.StringType},
+				{Name: "baz", Type: schema.BoolType},
 			},
 		},
 		{
@@ -1071,14 +1118,20 @@ func Test_parser_definitionsBody(t *testing.T) {
 		},
 		{
 			input: "(foo int)",
-			expected: []*newColumn{
-				{name: "foo", _type: Int32Type},
+			expected: []*schema.NewColumn{
+				{Name: "foo", Type: schema.Int32Type},
 			},
 		},
 	}
 
 	for i, tt := range tests {
-		p := newParser(tt.input)
+		p := NewParser(tt.input)
+
+		err := p.moveToNextToken()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
 		got, err := p.definitionsBody()
 		gotErr := ""
@@ -1086,14 +1139,14 @@ func Test_parser_definitionsBody(t *testing.T) {
 			gotErr = err.Error()
 		}
 
-		if tt.expectedErr != "" {
+		if gotErr != "" {
 			if tt.expectedErr != gotErr {
 				t.Errorf("test %d failed: expected err '%s', but got '%s'", i+1, tt.expectedErr, gotErr)
 			}
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(newColumn{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(schema.NewColumn{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -1125,7 +1178,13 @@ func Test_parser_name(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		p := newParser(tt.input)
+		p := NewParser(tt.input)
+
+		err := p.moveToNextToken()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
 		got, err := p.name()
 		gotErr := ""
@@ -1133,14 +1192,14 @@ func Test_parser_name(t *testing.T) {
 			gotErr = err.Error()
 		}
 
-		if tt.expectedErr != "" {
+		if gotErr != "" {
 			if tt.expectedErr != gotErr {
 				t.Errorf("test %d failed: expected err '%s', but got '%s'", i+1, tt.expectedErr, gotErr)
 			}
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(newColumn{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(schema.NewColumn{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -1188,7 +1247,13 @@ func Test_parser_valuesBody(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		p := newParser(tt.input)
+		p := NewParser(tt.input)
+
+		err := p.moveToNextToken()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
 		got, err := p.valuesBody()
 		gotErr := ""
@@ -1203,7 +1268,7 @@ func Test_parser_valuesBody(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(newColumn{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(schema.NewColumn{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -1212,25 +1277,25 @@ func Test_parser_valuesBody(t *testing.T) {
 func Test_parser_whereBody(t *testing.T) {
 	type test struct {
 		input       string
-		expected    *expression
+		expected    *Expression
 		expectedErr string
 	}
 	tests := []test{
 		{
 			input: "a == 1",
-			expected: &expression{
-				_type:    Operator,
-				operator: "equal",
-				left: &expression{
-					_type:     Operand,
-					valueType: "name",
-					strValue:  "a",
+			expected: &Expression{
+				Type:     Operator,
+				Operator: "equal",
+				Left: &Expression{
+					Type:      Operand,
+					ValueType: "name",
+					StrValue:  "a",
 				},
-				right: &expression{
-					_type:     Operand,
-					valueType: "number_literal",
-					strValue:  "1",
-					goValue:   float64(1),
+				Right: &Expression{
+					Type:      Operand,
+					ValueType: "number_literal",
+					StrValue:  "1",
+					GoValue:   float64(1),
 				},
 			},
 		},
@@ -1245,7 +1310,13 @@ func Test_parser_whereBody(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		p := newParser(tt.input)
+		p := NewParser(tt.input)
+
+		err := p.moveToNextToken()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 
 		got, err := p.whereBody()
 		gotErr := ""
@@ -1260,7 +1331,7 @@ func Test_parser_whereBody(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(expression{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
