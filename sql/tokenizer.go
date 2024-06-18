@@ -6,91 +6,116 @@ import (
 	"strings"
 )
 
+type tokenType string
+
+const (
+	clause           tokenType = "clause"
+	dataType         tokenType = "data_type"
+	comma            tokenType = "comma"
+	booleanLiteral   tokenType = "boolean_literal"
+	stringLiteral    tokenType = "string_literal"
+	numberLiteral    tokenType = "number_literal"
+	leftParenthesis  tokenType = "left_parenthesis"
+	rightParenthesis tokenType = "right_parenthesis"
+	and              tokenType = "and"
+	or               tokenType = "or"
+	equal            tokenType = "equal"
+	notEqual         tokenType = "not_equal"
+	greaterEqual     tokenType = "greater_equal"
+	greater          tokenType = "greater"
+	lessEqual        tokenType = "less_equal"
+	less             tokenType = "less"
+	identifier       tokenType = "identifier"
+	whitespace       tokenType = "whitespace"
+	endOfStatement   tokenType = "end_of_statement"
+	invalid          tokenType = "invalid"
+)
+
 type tokenRegexps struct {
-	name    string
+	name    tokenType
 	regexps []*regexp.Regexp
 }
 
 var (
 	regexps = []*tokenRegexps{
 		{
-			name:    "clause",
+			name:    clause,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^(SELECT|FROM|(INSERT\s+INTO)|WHERE|(CREATE\s+TABLE)|DEFINITIONS|VALUES)\b`)},
 		},
 		{
-			name:    "data_type",
+			name:    dataType,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^(int|string|bool)\b`)},
 		},
 		{
-			name:    "comma",
+			name:    comma,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^,`)},
 		},
 		{
-			name:    "boolean_literal",
+			name:    booleanLiteral,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^(TRUE|FALSE)\b`)},
 		},
 		{
-			name:    "string_literal",
+			name:    stringLiteral,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^"([^"]*)"`)},
 		},
 		{
-			name:    "number_literal",
+			name:    numberLiteral,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^\d+(\.\d+)?`)},
 		},
 		{
-			name:    "left_parenthesis",
+			name:    leftParenthesis,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^\(`)},
 		},
 		{
-			name:    "right_parenthesis",
+			name:    rightParenthesis,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^\)`)},
 		},
 		{
-			name:    "and",
+			name:    and,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^AND\b`)},
 		},
 		{
-			name:    "or",
+			name:    or,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`(?i)^OR\b`)},
 		},
 		{
-			name:    "equal",
+			name:    equal,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^==`)},
 		},
 		{
-			name:    "not_equal",
+			name:    notEqual,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^!=`)},
 		},
 		{
-			name:    "greater_equal",
+			name:    greaterEqual,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^>=`)},
 		},
 		{
-			name:    "greater",
+			name:    greater,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^>`)},
 		},
 		{
-			name:    "less_equal",
+			name:    lessEqual,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^<=`)},
 		},
 		{
-			name:    "less",
+			name:    less,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^<`)},
 		},
 		{
-			name:    "name",
+			name:    identifier,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^\w*`)},
 		},
 		{
-			name:    "whitespace",
+			name:    whitespace,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^\s*`)},
 		},
 		{
-			name:    "end_of_statement",
+			name:    endOfStatement,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^;`)},
 		},
 		{
-			name:    "invalid",
+			name:    invalid,
 			regexps: []*regexp.Regexp{regexp.MustCompile(`^.*`)},
 		},
 	}

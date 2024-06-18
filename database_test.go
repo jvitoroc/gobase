@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jvitoroc/gobase/schema"
-	"github.com/jvitoroc/gobase/sql"
 )
 
 func TestSimplestEndToEnd(t *testing.T) {
@@ -113,155 +111,6 @@ func TestDatabaseCreateTable(t *testing.T) {
 			t.Errorf("didn't generate id for column '%s'", c.Name)
 			return
 		}
-	}
-}
-
-func Test_evaluateBooleanExpressionAgainstRow(t *testing.T) {
-	type args struct {
-		row  *schema.DeserializedRow
-		expr *sql.Expression
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *result
-		wantErr bool
-	}{
-		{
-			args: args{
-				row: &schema.DeserializedRow{
-					Columns: []*schema.DeserializedColumn{
-						{Value: float64(23), Column: &schema.Column{Type: schema.Int32Type, Name: "foo"}},
-					},
-				},
-				expr: &sql.Expression{
-					Type:     sql.Operator,
-					Operator: "and",
-					Left: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "greater",
-						Left: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(3),
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(2),
-						},
-					},
-					Right: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "equal",
-						Left: &sql.Expression{
-							Type:      sql.Operand,
-							ValueType: "name",
-							StrValue:  "foo",
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(23),
-						},
-					},
-				},
-			},
-			want: &result{
-				goValue: true,
-			},
-		},
-		{
-			args: args{
-				row: &schema.DeserializedRow{
-					Columns: []*schema.DeserializedColumn{
-						{Value: float64(23), Column: &schema.Column{Type: schema.Int32Type, Name: "foo"}},
-					},
-				},
-				expr: &sql.Expression{
-					Type:     sql.Operator,
-					Operator: "or",
-					Left: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "greater",
-						Left: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(3),
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(2),
-						},
-					},
-					Right: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "equal",
-						Left: &sql.Expression{
-							Type:      sql.Operand,
-							ValueType: "name",
-							StrValue:  "foo",
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(1),
-						},
-					},
-				},
-			},
-			want: &result{
-				goValue: true,
-			},
-		},
-		{
-			args: args{
-				row: &schema.DeserializedRow{
-					Columns: []*schema.DeserializedColumn{
-						{Value: float64(23), Column: &schema.Column{Type: schema.Int32Type, Name: "foo"}},
-					},
-				},
-				expr: &sql.Expression{
-					Type:     sql.Operator,
-					Operator: "and",
-					Left: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "greater",
-						Left: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(3),
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(2),
-						},
-					},
-					Right: &sql.Expression{
-						Type:     sql.Operator,
-						Operator: "equal",
-						Left: &sql.Expression{
-							Type:      sql.Operand,
-							ValueType: "name",
-							StrValue:  "foo",
-						},
-						Right: &sql.Expression{
-							Type:    sql.Operand,
-							GoValue: float64(1),
-						},
-					},
-				},
-			},
-			want: &result{
-				goValue: false,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := evaluateBooleanExpressionAgainstRow(tt.args.row, tt.args.expr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("evaluateBooleansql.ExpressionAgainstRow() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("evaluateBooleansql.ExpressionAgainstRow() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }
 

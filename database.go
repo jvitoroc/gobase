@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/jvitoroc/gobase/eval"
 	"github.com/jvitoroc/gobase/schema"
 	"github.com/jvitoroc/gobase/sql"
 )
@@ -52,15 +53,15 @@ func (d *database) run(r io.Writer, batch string) error {
 		}
 
 		switch s.Clauses[0].Type {
-		case "create table":
+		case sql.CreateTable:
 			if err := d.createTableStatement(r, s); err != nil {
 				return err
 			}
-		case "select":
+		case sql.Select:
 			if err := d.selectStatement(r, s); err != nil {
 				return err
 			}
-		case "insert into":
+		case sql.InsertInto:
 			if err := d.InsertIntoStatement(r, s); err != nil {
 				return err
 			}
@@ -82,9 +83,9 @@ func (d *database) createTableStatement(r io.Writer, s *sql.Statement) error {
 
 	for _, p := range s.Clauses {
 		switch p.Type {
-		case "create table":
+		case sql.CreateTable:
 			tableName = p.Body.(string)
-		case "definitions":
+		case sql.Definitions:
 			columns = p.Body.([]*schema.NewColumn)
 		}
 	}
@@ -107,9 +108,9 @@ func (d *database) InsertIntoStatement(r io.Writer, s *sql.Statement) error {
 
 	for _, p := range s.Clauses {
 		switch p.Type {
-		case "insert into":
+		case sql.InsertInto:
 			tableName = p.Body.(string)
-		case "values":
+		case sql.Values:
 			values = p.Body.([]string)
 		}
 	}
@@ -134,16 +135,16 @@ func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
 
 	tableName := ""
 	var returningColumns []string
-	var filter *sql.Expression
+	var filter *eval.Expression
 
 	for _, p := range s.Clauses {
 		switch p.Type {
-		case "select":
+		case sql.Select:
 			returningColumns, _ = p.Body.([]string)
-		case "from":
+		case sql.From:
 			tableName, _ = p.Body.(string)
-		case "where":
-			filter, _ = p.Body.(*sql.Expression)
+		case sql.Where:
+			filter, _ = p.Body.(*eval.Expression)
 		}
 	}
 
@@ -153,12 +154,12 @@ func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
 	}
 
 	err := t.Read(context.Background(), r, returningColumns, func(row *schema.DeserializedRow) (bool, error) {
-		r, err := evaluateBooleanExpressionAgainstRow(row, filter)
+		r, err := eval.Evaluate(filter, row.Map())
 		if err != nil {
 			return false, err
 		}
 
-		if res, ok := r.goValue.(bool); ok {
+		if res, ok := r.GoValue.(bool); ok {
 			if ok {
 				return res, nil
 			}
@@ -173,203 +174,6 @@ func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
 	return nil
 }
 
-type result struct {
-	goValue any
-}
-
-func (r *result) genericValueType() string {
-	switch r.goValue.(type) {
-	case float64:
-		return "number"
-	case bool:
-		return "bool"
-	case string:
-		return "string"
-	default:
-		return ""
-	}
-}
-
-func evaluateBooleanExpressionAgainstRow(row *schema.DeserializedRow, expr *sql.Expression) (*result, error) {
-	if expr.Type == sql.Operand {
-		if expr.ValueType == "name" {
-			c := row.GetColumn(expr.StrValue)
-			if c == nil {
-				return nil, fmt.Errorf("column '%s' does not exist", expr.StrValue)
-			}
-
-			return &result{
-				goValue: c.Value,
-			}, nil
-		} else {
-			return &result{
-				goValue: expr.GoValue,
-			}, nil
-		}
-	}
-
-	if expr.Type == sql.Operator {
-		switch expr.Operator {
-		case sql.And:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			l, ok := left.goValue.(bool)
-			if !ok {
-				return nil, errors.New("both sides of an logical operation must be boolean values")
-			}
-
-			if !l {
-				return &result{goValue: false}, nil
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			r, ok := right.goValue.(bool)
-			if !ok {
-				return nil, errors.New("both sides of an logical operation must be boolean values")
-			}
-
-			return &result{goValue: l && r}, nil
-		case sql.Or:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			l, ok := left.goValue.(bool)
-			if !ok {
-				return nil, errors.New("both sides of an logical operation must be boolean values")
-			}
-
-			if l {
-				return &result{goValue: true}, nil
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			r, ok := right.goValue.(bool)
-			if !ok {
-				return nil, errors.New("both sides of an logical operation must be boolean values")
-			}
-
-			return &result{goValue: l || r}, nil
-		case sql.Equal:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			return &result{goValue: left.goValue == right.goValue}, nil
-		case sql.NotEqual:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			return &result{goValue: left.goValue != right.goValue}, nil
-		case sql.GreaterThan:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			if !(left.genericValueType() == "number" && left.genericValueType() == right.genericValueType()) {
-				return nil, errors.New("both sides of a comparison operation must be numbers")
-			}
-
-			return &result{goValue: greaterThan(left.goValue, right.goValue)}, nil
-		case sql.GreaterEqualThan:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			if !(left.genericValueType() == "number" && left.genericValueType() == right.genericValueType()) {
-				return nil, errors.New("both sides of a comparison operation must be numbers")
-			}
-
-			return &result{goValue: greaterOrEqualThan(left.goValue, right.goValue)}, nil
-		case sql.LessThan:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			if !(left.genericValueType() == "number" && left.genericValueType() == right.genericValueType()) {
-				return nil, errors.New("both sides of a comparison operation must be numbers")
-			}
-
-			return &result{goValue: greaterThan(right.goValue, left.goValue)}, nil
-		case sql.LessEqualThan:
-			left, err := evaluateBooleanExpressionAgainstRow(row, expr.Left)
-			if err != nil {
-				return nil, err
-			}
-
-			right, err := evaluateBooleanExpressionAgainstRow(row, expr.Right)
-			if err != nil {
-				return nil, err
-			}
-
-			if !(left.genericValueType() == "number" && left.genericValueType() == right.genericValueType()) {
-				return nil, errors.New("both sides of a comparison operation must be numbers")
-			}
-
-			return &result{goValue: greaterOrEqualThan(right.goValue, left.goValue)}, nil
-		}
-	}
-
-	return nil, errors.New("unknown Expression type")
-}
-
-func greaterThan(left, right any) bool {
-	l := left.(float64)
-	r := right.(float64)
-
-	return l > r
-}
-
-func greaterOrEqualThan(left, right any) bool {
-	l := left.(float64)
-	r := right.(float64)
-
-	return l >= r
-}
-
 func validateSelectStatement(s *sql.Statement) error {
 	hasSelect := false
 	hasFrom := false
@@ -377,7 +181,7 @@ func validateSelectStatement(s *sql.Statement) error {
 	for _, p := range s.Clauses {
 		switch p.Type {
 		case sql.Select:
-			b, ok := p.Body.([]*sql.Expression)
+			b, ok := p.Body.([]*eval.Expression)
 			if !ok {
 				return errors.New("invalid type for SELECT body")
 			}
@@ -399,7 +203,7 @@ func validateSelectStatement(s *sql.Statement) error {
 
 			hasFrom = true
 		case sql.Where:
-			b, ok := p.Body.(*sql.Expression)
+			b, ok := p.Body.(*eval.Expression)
 			if !ok {
 				return errors.New("invalid type for WHERE body")
 			}

@@ -3,6 +3,7 @@ package sql
 import (
 	"testing"
 
+	"github.com/jvitoroc/gobase/eval"
 	"github.com/jvitoroc/gobase/schema"
 
 	"github.com/google/go-cmp/cmp"
@@ -21,9 +22,9 @@ func TestRidiculousSelect(t *testing.T) {
 			Clauses: []*Clause{
 				{
 					Type: "select",
-					Body: []*Expression{
-						{Type: "operand", ValueType: "name", StrValue: "foo"},
-						{Type: "operand", ValueType: "name", StrValue: "bar"},
+					Body: []*eval.Expression{
+						{Type: "operand", Identifier: "foo"},
+						{Type: "operand", Identifier: "bar"},
 					},
 				},
 				{
@@ -32,36 +33,32 @@ func TestRidiculousSelect(t *testing.T) {
 				},
 				{
 					Type: "where",
-					Body: &Expression{
+					Body: &eval.Expression{
 						Type:     "operator",
 						Operator: "or",
-						Left: &Expression{
+						Left: &eval.Expression{
 							Type:     "operator",
 							Operator: "equal",
-							Left:     &Expression{Type: "operand", ValueType: "name", StrValue: "foo"},
-							Right: &Expression{
-								Type:      "operand",
-								ValueType: "string_literal",
-								StrValue:  "  bbbbasdasd asd asd ",
-								GoValue:   string("  bbbbasdasd asd asd "),
+							Left:     &eval.Expression{Type: "operand", Identifier: "foo"},
+							Right: &eval.Expression{
+								Type:    "operand",
+								GoValue: string("  bbbbasdasd asd asd "),
 							},
 						},
-						Right: &Expression{
+						Right: &eval.Expression{
 							Type:     "operator",
 							Operator: "greater_equal",
-							Left:     &Expression{Type: "operand", ValueType: "name", StrValue: "bar"},
-							Right: &Expression{
-								Type:      "operand",
-								ValueType: "number_literal",
-								StrValue:  "1.0",
-								GoValue:   float64(1),
+							Left:     &eval.Expression{Type: "operand", Identifier: "bar"},
+							Right: &eval.Expression{
+								Type:    "operand",
+								GoValue: float64(1),
 							},
 						},
 					},
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, Expression{}))
+	}, cmp.AllowUnexported(token{}, eval.Expression{}))
 	if diff != "" {
 		t.Error(diff)
 	}
@@ -96,7 +93,7 @@ func TestCreateTable(t *testing.T) {
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, Expression{}, schema.NewColumn{}))
+	}, cmp.AllowUnexported(token{}, eval.Expression{}, schema.NewColumn{}))
 	if diff != "" {
 		t.Error(diff)
 	}
@@ -127,7 +124,7 @@ func TestInsertInto(t *testing.T) {
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, Expression{}))
+	}, cmp.AllowUnexported(token{}, eval.Expression{}))
 	if diff != "" {
 		t.Error(diff)
 	}
@@ -186,10 +183,10 @@ func TestMultipleStatements(t *testing.T) {
 			Clauses: []*Clause{
 				{
 					Type: "select",
-					Body: []*Expression{
-						{Type: Operand, ValueType: "name", StrValue: "foo"},
-						{Type: Operand, ValueType: "name", StrValue: "bar"},
-						{Type: Operand, ValueType: "name", StrValue: "baz"},
+					Body: []*eval.Expression{
+						{Type: eval.Operand, Identifier: "foo"},
+						{Type: eval.Operand, Identifier: "bar"},
+						{Type: eval.Operand, Identifier: "baz"},
 					},
 				},
 				{
@@ -198,44 +195,38 @@ func TestMultipleStatements(t *testing.T) {
 				},
 				{
 					Type: "where",
-					Body: &Expression{
-						Type:     Operator,
+					Body: &eval.Expression{
+						Type:     eval.Operator,
 						Operator: "and",
-						Left: &Expression{
-							Type:     Operator,
+						Left: &eval.Expression{
+							Type:     eval.Operator,
 							Operator: "not_equal",
-							Left: &Expression{
-								Type:      Operand,
-								ValueType: "name",
-								StrValue:  "foo",
+							Left: &eval.Expression{
+								Type:       eval.Operand,
+								Identifier: "foo",
 							},
-							Right: &Expression{
-								Type:      Operand,
-								ValueType: "boolean_literal",
-								StrValue:  "false",
-								GoValue:   false,
+							Right: &eval.Expression{
+								Type:    eval.Operand,
+								GoValue: false,
 							},
 						},
-						Right: &Expression{
-							Type:     Operator,
+						Right: &eval.Expression{
+							Type:     eval.Operator,
 							Operator: "greater",
-							Left: &Expression{
-								Type:      Operand,
-								ValueType: "name",
-								StrValue:  "bar",
+							Left: &eval.Expression{
+								Type:       eval.Operand,
+								Identifier: "bar",
 							},
-							Right: &Expression{
-								Type:      Operand,
-								ValueType: "number_literal",
-								StrValue:  "100",
-								GoValue:   float64(100),
+							Right: &eval.Expression{
+								Type:    eval.Operand,
+								GoValue: float64(100),
 							},
 						},
 					},
 				},
 			},
 		},
-	}, cmp.AllowUnexported(token{}, Expression{}, schema.NewColumn{}))
+	}, cmp.AllowUnexported(token{}, eval.Expression{}, schema.NewColumn{}))
 	if diff != "" {
 		t.Error(diff)
 	}
@@ -255,21 +246,21 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			args: args{
 				input: "",
 			},
-			wantErr: "empty Expression",
+			wantErr: "empty eval.Expression",
 		},
 		{
 			name: "invalid token",
 			args: args{
 				input: "(select",
 			},
-			wantErr: "'select' at 1:2 is not valid as part of an Expression",
+			wantErr: "'select' at 1:2 is not valid as part of an eval.Expression",
 		},
 		{
-			name: "invalid beginning of Expression",
+			name: "invalid beginning of eval.Expression",
 			args: args{
 				input: "and select",
 			},
-			wantErr: "can't start Expression with operator 'and' at 1:1",
+			wantErr: "can't start eval.Expression with operator 'and' at 1:1",
 		},
 		{
 			name: "invalid token after operand",
@@ -300,11 +291,11 @@ func Test_checkBooleanExpressionSyntax(t *testing.T) {
 			wantErr: "an operator is not allowed to be positioned at 1:2 after an opening parenthesis",
 		},
 		{
-			name: "ending Expression with operator",
+			name: "ending eval.Expression with operator",
 			args: args{
 				input: ") and",
 			},
-			wantErr: "can't end Expression with an operator 'and' at 1:3",
+			wantErr: "can't end eval.Expression with an operator 'and' at 1:3",
 		},
 		{
 			name: "happy path",
@@ -558,7 +549,7 @@ func Test_infixToPostfix(t *testing.T) {
 func Test_infixToExpressionTree(t *testing.T) {
 	type test struct {
 		input       string
-		expected    *Expression
+		expected    *eval.Expression
 		expectedErr string
 	}
 	tests := []test{
@@ -572,147 +563,126 @@ func Test_infixToExpressionTree(t *testing.T) {
 		},
 		{
 			input: "1 > 2",
-			expected: &Expression{
-				Type:     Operator,
+			expected: &eval.Expression{
+				Type:     eval.Operator,
 				Operator: "greater",
-				Left: &Expression{
-					Type:      Operand,
-					ValueType: "number_literal",
-					GoValue:   float64(1),
-					StrValue:  "1",
+				Left: &eval.Expression{
+					Type:    eval.Operand,
+					GoValue: float64(1),
 				},
-				Right: &Expression{
-					Type:      Operand,
-					ValueType: "number_literal",
-					GoValue:   float64(2),
-					StrValue:  "2",
+				Right: &eval.Expression{
+					Type:    eval.Operand,
+					GoValue: float64(2),
 				},
 			},
 		},
 		{
 			input: "a == b",
-			expected: &Expression{
-				Type:     Operator,
+			expected: &eval.Expression{
+				Type:     eval.Operator,
 				Operator: "equal",
-				Left: &Expression{
-					Type:      Operand,
-					ValueType: "name",
-					StrValue:  "a",
+				Left: &eval.Expression{
+					Type: eval.Operand,
+
+					Identifier: "a",
 				},
-				Right: &Expression{
-					Type:      Operand,
-					ValueType: "name",
-					StrValue:  "b",
+				Right: &eval.Expression{
+					Type: eval.Operand,
+
+					Identifier: "b",
 				},
 			},
 		},
 		{
 			input: "(x > 0) and (y <= 10)",
-			expected: &Expression{
-				Type:     Operator,
+			expected: &eval.Expression{
+				Type:     eval.Operator,
 				Operator: "and",
-				Left: &Expression{
-					Type:     Operator,
+				Left: &eval.Expression{
+					Type:     eval.Operator,
 					Operator: "greater",
-					Left: &Expression{
-						Type:      Operand,
-						ValueType: "name",
-						StrValue:  "x",
+					Left: &eval.Expression{
+						Type:       eval.Operand,
+						Identifier: "x",
 					},
-					Right: &Expression{
-						Type:      Operand,
-						ValueType: "number_literal",
-						GoValue:   float64(0),
-						StrValue:  "0",
+					Right: &eval.Expression{
+						Type:    eval.Operand,
+						GoValue: float64(0),
 					},
 				},
-				Right: &Expression{
-					Type:     Operator,
+				Right: &eval.Expression{
+					Type:     eval.Operator,
 					Operator: "less_equal",
-					Left: &Expression{
-						Type:      Operand,
-						ValueType: "name",
-						StrValue:  "y",
+					Left: &eval.Expression{
+						Type:       eval.Operand,
+						Identifier: "y",
 					},
-					Right: &Expression{
-						Type:      Operand,
-						ValueType: "number_literal",
-						GoValue:   float64(10),
-						StrValue:  "10",
+					Right: &eval.Expression{
+						Type:    eval.Operand,
+						GoValue: float64(10),
 					},
 				},
 			},
 		},
 		{
 			input: "(a > 0 and b <= 10) or (c == \"hello\" and d != 5)",
-			expected: &Expression{
-				Type:     Operator,
+			expected: &eval.Expression{
+				Type:     eval.Operator,
 				Operator: "or",
-				Left: &Expression{
-					Type:     Operator,
+				Left: &eval.Expression{
+					Type:     eval.Operator,
 					Operator: "and",
-					Left: &Expression{
-						Type:     Operator,
+					Left: &eval.Expression{
+						Type:     eval.Operator,
 						Operator: "greater",
-						Left: &Expression{
-							Type:      Operand,
-							ValueType: "name",
-							StrValue:  "a",
+						Left: &eval.Expression{
+							Type:       eval.Operand,
+							Identifier: "a",
 						},
-						Right: &Expression{
-							Type:      Operand,
-							ValueType: "number_literal",
-							GoValue:   float64(0),
-							StrValue:  "0",
+						Right: &eval.Expression{
+							Type:    eval.Operand,
+							GoValue: float64(0),
 						},
 					},
-					Right: &Expression{
-						Type:     Operator,
+					Right: &eval.Expression{
+						Type:     eval.Operator,
 						Operator: "less_equal",
-						Left: &Expression{
-							Type:      Operand,
-							ValueType: "name",
-							StrValue:  "b",
+						Left: &eval.Expression{
+							Type:       eval.Operand,
+							Identifier: "b",
 						},
-						Right: &Expression{
-							Type:      Operand,
-							ValueType: "number_literal",
-							GoValue:   float64(10),
-							StrValue:  "10",
+						Right: &eval.Expression{
+							Type:    eval.Operand,
+							GoValue: float64(10),
 						},
 					},
 				},
-				Right: &Expression{
-					Type:     Operator,
+				Right: &eval.Expression{
+					Type:     eval.Operator,
 					Operator: "and",
-					Left: &Expression{
-						Type:     Operator,
+					Left: &eval.Expression{
+						Type:     eval.Operator,
 						Operator: "equal",
-						Left: &Expression{
-							Type:      Operand,
-							ValueType: "name",
-							StrValue:  "c",
+						Left: &eval.Expression{
+							Type:       eval.Operand,
+							Identifier: "c",
 						},
-						Right: &Expression{
-							Type:      Operand,
-							ValueType: "string_literal",
-							StrValue:  "hello",
-							GoValue:   "hello",
+						Right: &eval.Expression{
+							Type:    eval.Operand,
+							GoValue: "hello",
 						},
 					},
-					Right: &Expression{
-						Type:     Operator,
+					Right: &eval.Expression{
+						Type:     eval.Operator,
 						Operator: "not_equal",
-						Left: &Expression{
-							Type:      Operand,
-							ValueType: "name",
-							StrValue:  "d",
+						Left: &eval.Expression{
+							Type: eval.Operand,
+
+							Identifier: "d",
 						},
-						Right: &Expression{
-							Type:      Operand,
-							ValueType: "number_literal",
-							GoValue:   float64(5),
-							StrValue:  "5",
+						Right: &eval.Expression{
+							Type:    eval.Operand,
+							GoValue: float64(5),
 						},
 					},
 				},
@@ -736,7 +706,7 @@ func Test_infixToExpressionTree(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(Expression{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(eval.Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -768,7 +738,7 @@ func Test_parser_mustTokenize(t *testing.T) {
 				{_type: "less", strValue: "<", line: 1, column: 60},
 				{_type: "greater_equal", strValue: ">=", line: 1, column: 62},
 				{_type: "less_equal", strValue: "<=", line: 1, column: 65},
-				{_type: "name", strValue: "foo", line: 1, column: 68},
+				{_type: "identifier", strValue: "foo", line: 1, column: 68},
 				{_type: "end_of_statement", strValue: ";", line: 1, column: 72},
 			},
 		},
@@ -776,7 +746,7 @@ func Test_parser_mustTokenize(t *testing.T) {
 			input: "; foo <= >= < > != == oR AnD () 123.321 123 \"string\" FaLse TrUe , sElEcT",
 			expected: []token{
 				{_type: "end_of_statement", strValue: ";", line: 1, column: 1},
-				{_type: "name", strValue: "foo", line: 1, column: 3},
+				{_type: "identifier", strValue: "foo", line: 1, column: 3},
 				{_type: "less_equal", strValue: "<=", line: 1, column: 7},
 				{_type: "greater_equal", strValue: ">=", line: 1, column: 10},
 				{_type: "less", strValue: "<", line: 1, column: 13},
@@ -826,7 +796,7 @@ func Test_parser_moveToNextToken(t *testing.T) {
 		return
 	}
 
-	if p.lookahead._type != "name" {
+	if p.lookahead._type != "identifier" {
 		t.Errorf("expected ;, but got '%s'", p.lookahead._type)
 		return
 	}
@@ -884,7 +854,7 @@ func Test_parser_consume(t *testing.T) {
 		return
 	}
 
-	if p.lookahead._type != "name" {
+	if p.lookahead._type != "identifier" {
 		t.Errorf("expected lookahead token to be ;, but got '%s'", p.lookahead._type)
 		return
 	}
@@ -900,8 +870,8 @@ func Test_parser_consume(t *testing.T) {
 		return
 	}
 
-	if tk._type != "name" {
-		t.Errorf("expected consumed token to be name, but got '%s'", tk._type)
+	if tk._type != "identifier" {
+		t.Errorf("expected consumed token to be identifier, but got '%s'", tk._type)
 		return
 	}
 
@@ -913,88 +883,72 @@ func Test_parser_consume(t *testing.T) {
 func Test_parser_selectBody(t *testing.T) {
 	type test struct {
 		input       string
-		expected    []*Expression
+		expected    []*eval.Expression
 		expectedErr string
 	}
 	tests := []test{
 		{
 			input: "foo, bar, 1 == 1, 2 <= 2, (1 != 2) and (true == false)",
-			expected: []*Expression{
+			expected: []*eval.Expression{
 				{
-					Type:      "operand",
-					ValueType: "name",
-					StrValue:  "foo",
+					Type: "operand",
+
+					Identifier: "foo",
 				},
 				{
-					Type:      "operand",
-					ValueType: "name",
-					StrValue:  "bar",
+					Type: "operand",
+
+					Identifier: "bar",
 				},
 				{
 					Type:     "operator",
 					Operator: "equal",
-					Left: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "1",
-						GoValue:   float64(1),
+					Left: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(1),
 					},
-					Right: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "1",
-						GoValue:   float64(1),
+					Right: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(1),
 					},
 				},
 				{
 					Type:     "operator",
 					Operator: "less_equal",
-					Left: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "2",
-						GoValue:   float64(2),
+					Left: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(2),
 					},
-					Right: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "2",
-						GoValue:   float64(2),
+					Right: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(2),
 					},
 				},
 				{
 					Type:     "operator",
 					Operator: "and",
-					Left: &Expression{
+					Left: &eval.Expression{
 						Type:     "operator",
 						Operator: "not_equal",
-						Left: &Expression{
-							Type:      "operand",
-							ValueType: "number_literal",
-							StrValue:  "1",
-							GoValue:   float64(1),
+						Left: &eval.Expression{
+							Type:    "operand",
+							GoValue: float64(1),
 						},
-						Right: &Expression{
-							Type:      "operand",
-							ValueType: "number_literal",
-							StrValue:  "2",
-							GoValue:   float64(2),
+						Right: &eval.Expression{
+							Type:    "operand",
+							GoValue: float64(2),
 						},
 					},
-					Right: &Expression{
+					Right: &eval.Expression{
 						Type:     "operator",
 						Operator: "equal",
-						Left: &Expression{
-							Type:      "operand",
-							ValueType: "boolean_literal",
-							StrValue:  "true",
-							GoValue:   true,
+						Left: &eval.Expression{
+							Type:    "operand",
+							GoValue: true,
 						},
-						Right: &Expression{
-							Type:      "operand",
-							ValueType: "boolean_literal",
-							StrValue:  "false",
-							GoValue:   false,
+						Right: &eval.Expression{
+							Type:    "operand",
+							GoValue: false,
 						},
 					},
 				},
@@ -1002,31 +956,26 @@ func Test_parser_selectBody(t *testing.T) {
 		},
 		{
 			input: "foo",
-			expected: []*Expression{
+			expected: []*eval.Expression{
 				{
-					Type:      "operand",
-					ValueType: "name",
-					StrValue:  "foo",
+					Type:       "operand",
+					Identifier: "foo",
 				},
 			},
 		},
 		{
 			input: "1 == 1",
-			expected: []*Expression{
+			expected: []*eval.Expression{
 				{
 					Type:     "operator",
 					Operator: "equal",
-					Left: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "1",
-						GoValue:   float64(1),
+					Left: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(1),
 					},
-					Right: &Expression{
-						Type:      "operand",
-						ValueType: "number_literal",
-						StrValue:  "1",
-						GoValue:   float64(1),
+					Right: &eval.Expression{
+						Type:    "operand",
+						GoValue: float64(1),
 					},
 				},
 			},
@@ -1037,15 +986,15 @@ func Test_parser_selectBody(t *testing.T) {
 		},
 		{
 			input:       "",
-			expectedErr: "invalid Expression at 1:1",
+			expectedErr: "invalid eval.Expression at 1:1",
 		},
 		{
 			input:       "select",
-			expectedErr: "invalid Expression at 1:1",
+			expectedErr: "invalid eval.Expression at 1:1",
 		},
 		{
 			input:       " , , ",
-			expectedErr: "invalid Expression at 1:2",
+			expectedErr: "invalid eval.Expression at 1:2",
 		},
 	}
 
@@ -1071,7 +1020,7 @@ func Test_parser_selectBody(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{}, Expression{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(token{}, eval.Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}
@@ -1152,7 +1101,7 @@ func Test_parser_definitionsBody(t *testing.T) {
 	}
 }
 
-func Test_parser_name(t *testing.T) {
+func Test_parser_identifier(t *testing.T) {
 	type test struct {
 		input       string
 		expected    string
@@ -1165,15 +1114,15 @@ func Test_parser_name(t *testing.T) {
 		},
 		{
 			input:       "123",
-			expectedErr: "expected name, but got 'number_literal' at 1:1",
+			expectedErr: "expected identifier, but got 'number_literal' at 1:1",
 		},
 		{
 			input:       "true",
-			expectedErr: "expected name, but got 'boolean_literal' at 1:1",
+			expectedErr: "expected identifier, but got 'boolean_literal' at 1:1",
 		},
 		{
 			input:       "bool",
-			expectedErr: "expected name, but got 'data_type' at 1:1",
+			expectedErr: "expected identifier, but got 'data_type' at 1:1",
 		},
 	}
 
@@ -1186,7 +1135,7 @@ func Test_parser_name(t *testing.T) {
 			return
 		}
 
-		got, err := p.name()
+		got, err := p.identifier()
 		gotErr := ""
 		if err != nil {
 			gotErr = err.Error()
@@ -1277,25 +1226,22 @@ func Test_parser_valuesBody(t *testing.T) {
 func Test_parser_whereBody(t *testing.T) {
 	type test struct {
 		input       string
-		expected    *Expression
+		expected    *eval.Expression
 		expectedErr string
 	}
 	tests := []test{
 		{
 			input: "a == 1",
-			expected: &Expression{
-				Type:     Operator,
+			expected: &eval.Expression{
+				Type:     eval.Operator,
 				Operator: "equal",
-				Left: &Expression{
-					Type:      Operand,
-					ValueType: "name",
-					StrValue:  "a",
+				Left: &eval.Expression{
+					Type:       eval.Operand,
+					Identifier: "a",
 				},
-				Right: &Expression{
-					Type:      Operand,
-					ValueType: "number_literal",
-					StrValue:  "1",
-					GoValue:   float64(1),
+				Right: &eval.Expression{
+					Type:    eval.Operand,
+					GoValue: float64(1),
 				},
 			},
 		},
@@ -1331,7 +1277,7 @@ func Test_parser_whereBody(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(Expression{})); diff != "" {
+		if diff := cmp.Diff(got, tt.expected, cmp.AllowUnexported(eval.Expression{})); diff != "" {
 			t.Errorf("test %d failed: %s", i+1, diff)
 		}
 	}

@@ -20,7 +20,7 @@ func NewSchema(rootDir string) *Schema {
 
 type NewColumn struct {
 	Name string
-	Type ColumnType
+	Type ColumnDataType
 }
 
 func (s *Schema) CreateTable(name string, columns []*NewColumn) (*Table, error) {

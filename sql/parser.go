@@ -3,8 +3,8 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"slices"
 
+	"github.com/jvitoroc/gobase/eval"
 	"github.com/jvitoroc/gobase/schema"
 )
 
@@ -68,7 +68,7 @@ func (p *parser) Statements() ([]*Statement, error) {
 				return nil, errors.New("expected end of Statement, but got nothing")
 			}
 
-			if p.lookahead._type == "end_of_statement" {
+			if p.lookahead._type == endOfStatement {
 				err := p.moveToNextToken()
 				if err != nil {
 					return nil, err
@@ -92,7 +92,7 @@ func (p *parser) Statements() ([]*Statement, error) {
 }
 
 func (p *parser) clause() (*Clause, error) {
-	if p.lookahead._type != "clause" {
+	if p.lookahead._type != clause {
 		return nil, fmt.Errorf("expected clause keyword, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 	}
 
@@ -103,7 +103,7 @@ func (p *parser) clause() (*Clause, error) {
 
 	clauseType := ClauseType(tk.strValue)
 
-	body, err := p.clauseBody(clauseType)
+	body, err := p.clauseBody(clauseType, tk)
 	if err != nil {
 		return nil, err
 	}
@@ -114,40 +114,40 @@ func (p *parser) clause() (*Clause, error) {
 	}, nil
 }
 
-func (p *parser) clauseBody(_type ClauseType) (any, error) {
+func (p *parser) clauseBody(_type ClauseType, tk token) (any, error) {
 	switch _type {
 	case Select:
 		return p.selectBody()
 	case From:
-		return p.name()
+		return p.identifier()
 	case Where:
 		return p.whereBody()
 	case CreateTable:
-		return p.name()
+		return p.identifier()
 	case Definitions:
 		return p.definitionsBody()
 	case InsertInto:
-		return p.name()
+		return p.identifier()
 	case Values:
 		return p.valuesBody()
 	}
 
-	return nil, fmt.Errorf("expected a valid clause keyword, but got '%s' at %d:%d", _type, p.validLine(), p.validColumn())
+	return nil, fmt.Errorf("clause '%s' not supported at %d:%d", _type, tk.line, tk.column)
 }
 
 func (p *parser) selectBody() (any, error) {
-	body := make([]*Expression, 0)
+	body := make([]*eval.Expression, 0)
 
 	var lastComma token
 
 	for {
 		tempTokens := make([]token, 0)
 		for {
-			if p.lookahead.isPredicateToken() {
-				tempTokens = append(tempTokens, p.lookahead)
-			} else {
+			if !p.lookahead.isPredicateToken() {
 				break
 			}
+
+			tempTokens = append(tempTokens, p.lookahead)
 
 			err := p.moveToNextToken()
 			if err != nil {
@@ -160,7 +160,7 @@ func (p *parser) selectBody() (any, error) {
 		}
 
 		if len(tempTokens) == 0 {
-			return nil, fmt.Errorf("invalid Expression at %d:%d", p.validLine(), p.validColumn())
+			return nil, fmt.Errorf("invalid eval.Expression at %d:%d", p.validLine(), p.validColumn())
 		}
 
 		expr, err := infixToExpressionTree(tempTokens)
@@ -170,7 +170,7 @@ func (p *parser) selectBody() (any, error) {
 
 		body = append(body, expr)
 
-		if p.lookahead._type == "comma" {
+		if p.lookahead._type == comma {
 			var err error
 			lastComma, err = p.consume()
 			if err != nil {
@@ -205,27 +205,27 @@ func (p *parser) definitionsBody() (any, error) {
 
 		c := &schema.NewColumn{}
 
-		if p.lookahead._type == "name" {
-			tk, err := p.consume()
-			if err != nil {
-				return nil, err
-			}
-
-			c.Name = tk.strValue
-		} else {
+		if p.lookahead._type != identifier {
 			return nil, fmt.Errorf("expected column name, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
-		if p.lookahead._type == "data_type" {
-			tk, err := p.consume()
-			if err != nil {
-				return nil, err
-			}
+		tk, err := p.consume()
+		if err != nil {
+			return nil, err
+		}
 
-			c.Type = schema.ColumnType(tk.strValue)
-		} else {
+		c.Name = tk.strValue
+
+		if p.lookahead._type != dataType {
 			return nil, fmt.Errorf("expected column type, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
+
+		tk, err = p.consume()
+		if err != nil {
+			return nil, err
+		}
+
+		c.Type = schema.ColumnDataType(tk.strValue)
 
 		def = append(def, c)
 
@@ -238,11 +238,11 @@ func (p *parser) definitionsBody() (any, error) {
 			break
 		}
 
-		if p.lookahead._type != "comma" {
+		if p.lookahead._type != comma {
 			return nil, fmt.Errorf("expected comma, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
-		_, err := p.consume()
+		_, err = p.consume()
 		if err != nil {
 			return nil, err
 		}
@@ -292,7 +292,7 @@ func (p *parser) valuesBody() (any, error) {
 			break
 		}
 
-		if p.lookahead._type != "comma" {
+		if p.lookahead._type != comma {
 			return nil, fmt.Errorf("expected comma, but got '%s' at %d:%d", p.lookahead.strValue, p.validLine(), p.validColumn())
 		}
 
@@ -339,9 +339,9 @@ func (p *parser) whereBody() (any, error) {
 	return infixToExpressionTree(body)
 }
 
-func (p *parser) name() (any, error) {
-	if p.lookahead._type != "name" {
-		return nil, fmt.Errorf("expected name, but got '%s' at %d:%d", p.lookahead._type, p.validLine(), p.validColumn())
+func (p *parser) identifier() (any, error) {
+	if p.lookahead._type != identifier {
+		return nil, fmt.Errorf("expected identifier, but got '%s' at %d:%d", p.lookahead._type, p.validLine(), p.validColumn())
 	}
 
 	tk, err := p.consume()
@@ -352,7 +352,7 @@ func (p *parser) name() (any, error) {
 	return tk.strValue, nil
 }
 
-func infixToExpressionTree(tokens []token) (*Expression, error) {
+func infixToExpressionTree(tokens []token) (*eval.Expression, error) {
 	t, err := infixToPostfix(tokens)
 	if err != nil {
 		return nil, err
@@ -405,32 +405,34 @@ func infixToPostfix(tokens []token) ([]token, error) {
 	return postfix, nil
 }
 
-func postfixToExpressionTree(tokens []token) (*Expression, error) {
+func postfixToExpressionTree(tokens []token) (*eval.Expression, error) {
 	if len(tokens) == 0 {
 		return nil, errors.New("no tokens given")
 	}
 
-	s := stack[*Expression]{}
+	s := stack[*eval.Expression]{}
 
 	for _, tk := range tokens {
 		if tk.isOperand() {
-			s.push(&Expression{
-				Type:      Operand,
-				GoValue:   tk.goValue,
-				StrValue:  tk.strValue,
-				ValueType: tk._type,
-			})
+			expr := &eval.Expression{
+				Type:    eval.Operand,
+				GoValue: tk.goValue,
+			}
+			if tk._type == identifier {
+				expr.Identifier = tk.strValue
+			}
+			s.push(expr)
 		} else if tk.isOperator() {
 			right := s.pop()
 			left := s.pop()
 
-			if !slices.Contains(operators, OperatorType(tk._type)) {
+			if !eval.IsOperator(string(tk._type)) {
 				return nil, fmt.Errorf("token '%s' at %d:%d is not a valid operator", tk.strValue, tk.line, tk.column)
 			}
 
-			e := &Expression{
-				Type:     Operator,
-				Operator: OperatorType(tk._type),
+			e := &eval.Expression{
+				Type:     eval.Operator,
+				Operator: eval.OperatorType(tk._type),
 				Left:     left,
 				Right:    right,
 			}
@@ -465,7 +467,7 @@ func checkParenthesesBalance(tokens []token) error {
 
 func checkBooleanExpressionSyntax(tokens []token) error {
 	if len(tokens) == 0 {
-		return errors.New("empty Expression")
+		return errors.New("empty eval.Expression")
 	}
 
 	if err := checkParenthesesSyntax(tokens); err != nil {
@@ -482,15 +484,15 @@ func checkBooleanExpressionSyntax(tokens []token) error {
 		}
 
 		if !t.isPredicateToken() {
-			return fmt.Errorf("'%s' at %d:%d is not valid as part of an Expression", t.strValue, t.line, t.column)
+			return fmt.Errorf("'%s' at %d:%d is not valid as part of an eval.Expression", t.strValue, t.line, t.column)
 		}
 
 		if i == 0 && t.isOperator() {
-			return fmt.Errorf("can't start Expression with operator '%s' at %d:%d", t.strValue, t.line, t.column)
+			return fmt.Errorf("can't start eval.Expression with operator '%s' at %d:%d", t.strValue, t.line, t.column)
 		}
 
 		if i == len(tokens)-1 && t.isOperator() {
-			return fmt.Errorf("can't end Expression with an operator '%s' at %d:%d", t.strValue, t.line, t.column)
+			return fmt.Errorf("can't end eval.Expression with an operator '%s' at %d:%d", t.strValue, t.line, t.column)
 		}
 
 		if isPreviousOperand && t.isOperand() {

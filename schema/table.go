@@ -13,15 +13,15 @@ import (
 	"strconv"
 )
 
-type ColumnType string
+type ColumnDataType string
 
 const (
-	StringType ColumnType = "string"
-	BoolType   ColumnType = "bool"
-	Int32Type  ColumnType = "int"
+	StringType ColumnDataType = "string"
+	BoolType   ColumnDataType = "bool"
+	Int32Type  ColumnDataType = "int"
 )
 
-func checkValueType(_type ColumnType, value string) bool {
+func checkValueType(_type ColumnDataType, value string) bool {
 	switch _type {
 	case BoolType:
 		_, err := strconv.ParseBool(value)
@@ -39,10 +39,10 @@ func checkValueType(_type ColumnType, value string) bool {
 type Column struct {
 	ID   uint32
 	Name string
-	Type ColumnType
+	Type ColumnDataType
 }
 
-func blobToGoType(_type ColumnType, value []byte) (any, error) {
+func blobToGoType(_type ColumnDataType, value []byte) (any, error) {
 	switch _type {
 	case BoolType:
 		if value[0] == 01 {
@@ -64,7 +64,7 @@ func blobToGoType(_type ColumnType, value []byte) (any, error) {
 	return nil, errors.New("unsupported type")
 }
 
-func stringToBlob(_type ColumnType, value string) ([]byte, error) {
+func stringToBlob(_type ColumnDataType, value string) ([]byte, error) {
 	switch _type {
 	case BoolType:
 		v, _ := strconv.ParseBool(value)
@@ -129,6 +129,15 @@ func (d *DeserializedRow) GetColumn(name string) *DeserializedColumn {
 	}
 
 	return nil
+}
+
+func (d *DeserializedRow) Map() map[string]any {
+	m := make(map[string]any, len(d.Columns))
+	for _, c := range d.Columns {
+		m[c.Name] = c.Value
+	}
+
+	return m
 }
 
 func (t *Table) Read(ctx context.Context, wr io.Writer, columns []string, filter func(*DeserializedRow) (bool, error)) error {
