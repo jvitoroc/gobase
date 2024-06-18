@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -16,10 +18,13 @@ func TestSimplestEndToEnd(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	byt := make([]byte, 0)
-	buf := bytes.NewBuffer(byt)
+	buf := bytes.NewBuffer(make([]byte, 0))
 
-	err = database.run(buf, `
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	err = database.run(ctx, buf, `
 		CREATE TABLE foo DEFINITIONS (
 			foo bool,
 			bar int,
@@ -31,7 +36,7 @@ func TestSimplestEndToEnd(t *testing.T) {
 		return
 	}
 
-	err = database.run(buf, `
+	err = database.run(ctx, buf, `
 		INSERT INTO foo VALUES (true, 123, "foobarbaz");
 		INSERT INTO foo VALUES (true, 312, "aaa");
 	`)
@@ -40,7 +45,7 @@ func TestSimplestEndToEnd(t *testing.T) {
 		return
 	}
 
-	err = database.run(buf, `
+	err = database.run(ctx, buf, `
 		SELECT foo, bar, baz FROM foo WHERE foo != false AND bar > 100;
 	`)
 	if err != nil {
@@ -48,7 +53,12 @@ func TestSimplestEndToEnd(t *testing.T) {
 		return
 	}
 
-	t.Error(buf)
+	t.Error(buf.String())
+
+	// diff := cmp.Diff(buf.String(), `{"Columns":[{"ID":1603471906,"Name":"foo","Type":"bool","Value":true},{"ID":245024461,"Name":"bar","Type":"int","Value":123},{"ID":4080717064,"Name":"baz","Type":"string","Value":"foobarbaz"}]}{"Columns":[{"ID":1603471906,"Name":"foo","Type":"bool","Value":true},{"ID":245024461,"Name":"bar","Type":"int","Value":312},{"ID":4080717064,"Name":"baz","Type":"string","Value":"aaa"}]}`)
+	// if diff != "" {
+	// 	t.Error(diff)
+	// }
 }
 
 func TestDatabaseCreateTable(t *testing.T) {
@@ -59,7 +69,11 @@ func TestDatabaseCreateTable(t *testing.T) {
 		return
 	}
 
-	err = database.run(&bytes.Buffer{}, `
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	err = database.run(ctx, &bytes.Buffer{}, `
 		CREATE TABLE foo DEFINITIONS (
 			foo bool,
 			bar int,
@@ -111,38 +125,5 @@ func TestDatabaseCreateTable(t *testing.T) {
 			t.Errorf("didn't generate id for column '%s'", c.Name)
 			return
 		}
-	}
-}
-
-func Test_database_run(t *testing.T) {
-	type fields struct {
-		schema *schema.Schema
-	}
-	type args struct {
-		batch string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantR   string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := &database{
-				schema: tt.fields.schema,
-			}
-			r := &bytes.Buffer{}
-			if err := d.run(r, tt.args.batch); (err != nil) != tt.wantErr {
-				t.Errorf("database.run() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotR := r.String(); gotR != tt.wantR {
-				t.Errorf("database.run() = %v, want %v", gotR, tt.wantR)
-			}
-		})
 	}
 }

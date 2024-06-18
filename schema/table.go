@@ -140,40 +140,34 @@ func (d *DeserializedRow) Map() map[string]any {
 	return m
 }
 
-func (t *Table) Read(ctx context.Context, wr io.Writer, columns []string, filter func(*DeserializedRow) (bool, error)) error {
+func (t *Table) Read(ctx context.Context, wr io.Writer, columns []string, shouldInclude func(*DeserializedRow) (bool, error)) error {
 	ch := t.createReader(ctx)
 
 	for row := range ch {
 		switch r := row.(type) {
 		case []byte:
-			r1, err := t.deserializeRow(r)
+			dr, err := t.deserializeRow(r)
 			if err != nil {
-				wr.Write([]byte(err.Error()))
-				return nil
+				return err
 			}
 
-			r2, err := t.deserializeColumns(r1)
+			include, err := shouldInclude(dr)
 			if err != nil {
-				wr.Write([]byte(err.Error()))
-				return nil
+				return err
 			}
 
-			b, err := json.Marshal(r2)
-			if err != nil {
-				wr.Write([]byte(err.Error()))
-				return nil
+			if !include {
+				continue
 			}
 
-			filterResult, err := filter(r2)
+			drJson, err := json.Marshal(dr)
 			if err != nil {
-				wr.Write([]byte(err.Error()))
+				return err
 			}
 
-			if filterResult {
-				wr.Write(b)
-			}
+			wr.Write(drJson)
 		case error:
-			wr.Write([]byte(r.Error()))
+			return r
 		}
 	}
 
@@ -185,12 +179,17 @@ type DeserializedColumn struct {
 	Value any
 }
 
-func (t *Table) deserializeColumns(row map[uint32][]byte) (*DeserializedRow, error) {
+func (t *Table) deserializeRow(row []byte) (*DeserializedRow, error) {
+	m, err := deserializeColumns(row)
+	if err != nil {
+		return nil, err
+	}
+
 	r := &DeserializedRow{
 		Columns: make([]*DeserializedColumn, 0, len(t.Columns)),
 	}
 	for _, c := range t.Columns {
-		v, err := blobToGoType(c.Type, row[c.ID])
+		v, err := blobToGoType(c.Type, m[c.ID])
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +202,7 @@ func (t *Table) deserializeColumns(row map[uint32][]byte) (*DeserializedRow, err
 	return r, nil
 }
 
-func (t *Table) deserializeRow(row []byte) (map[uint32][]byte, error) {
+func deserializeColumns(row []byte) (map[uint32][]byte, error) {
 	r := bytes.NewReader(row)
 	mappedRow := make(map[uint32][]byte)
 

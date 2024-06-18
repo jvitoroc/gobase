@@ -16,6 +16,10 @@ import (
 
 type database struct {
 	schema *schema.Schema
+
+	// reserved for internal tables/
+	// such as the users table
+	internalSchema *schema.Schema
 }
 
 func (d *database) initialize(rootDir string) error {
@@ -36,7 +40,7 @@ func (d *database) initialize(rootDir string) error {
 	return nil
 }
 
-func (d *database) run(r io.Writer, batch string) error {
+func (d *database) run(ctx context.Context, r io.Writer, batch string) error {
 	p := sql.NewParser(batch)
 	sts, err := p.Parse()
 	if err != nil {
@@ -54,15 +58,15 @@ func (d *database) run(r io.Writer, batch string) error {
 
 		switch s.Clauses[0].Type {
 		case sql.CreateTable:
-			if err := d.createTableStatement(r, s); err != nil {
+			if err := d.createTableStatement(ctx, r, s); err != nil {
 				return err
 			}
 		case sql.Select:
-			if err := d.selectStatement(r, s); err != nil {
+			if err := d.selectStatement(ctx, r, s); err != nil {
 				return err
 			}
 		case sql.InsertInto:
-			if err := d.InsertIntoStatement(r, s); err != nil {
+			if err := d.InsertIntoStatement(ctx, r, s); err != nil {
 				return err
 			}
 		default:
@@ -73,7 +77,7 @@ func (d *database) run(r io.Writer, batch string) error {
 	return nil
 }
 
-func (d *database) createTableStatement(r io.Writer, s *sql.Statement) error {
+func (d *database) createTableStatement(ctx context.Context, r io.Writer, s *sql.Statement) error {
 	if err := validateCreateTableStatement(s); err != nil {
 		return err
 	}
@@ -98,7 +102,7 @@ func (d *database) createTableStatement(r io.Writer, s *sql.Statement) error {
 	return nil
 }
 
-func (d *database) InsertIntoStatement(r io.Writer, s *sql.Statement) error {
+func (d *database) InsertIntoStatement(ctx context.Context, r io.Writer, s *sql.Statement) error {
 	if err := validateInsertIntoStatement(s); err != nil {
 		return err
 	}
@@ -128,7 +132,7 @@ func (d *database) InsertIntoStatement(r io.Writer, s *sql.Statement) error {
 	return nil
 }
 
-func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
+func (d *database) selectStatement(ctx context.Context, r io.Writer, s *sql.Statement) error {
 	if err := validateSelectStatement(s); err != nil {
 		return err
 	}
@@ -153,7 +157,7 @@ func (d *database) selectStatement(r io.Writer, s *sql.Statement) error {
 		return fmt.Errorf("table with name '%s' does not exist", tableName)
 	}
 
-	err := t.Read(context.Background(), r, returningColumns, func(row *schema.DeserializedRow) (bool, error) {
+	err := t.Read(ctx, r, returningColumns, func(row *schema.DeserializedRow) (bool, error) {
 		r, err := eval.Evaluate(filter, row.Map())
 		if err != nil {
 			return false, err
